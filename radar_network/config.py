@@ -1,6 +1,6 @@
 """
 config.py
----------
+
 Central configuration for the UAV Threat-Aware Route Planning project.
 
 All parameters that might change between experiments or deployments live here.
@@ -10,7 +10,7 @@ to this file or to runtime user input.
 Future extension points are marked with # FUTURE: comments.
 
 World / grid convention (v2.0)
-------------------------------
+
   Origin   : bottom-left corner of the grid
   X axis   : east  (column index increases eastward)
   Y axis   : north (row index increases northward)
@@ -23,17 +23,17 @@ use the same convention.  Do not assume a different origin or axis direction.
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-# ---------------------------------------------------------------------------
+
 # Directory layout
-# ---------------------------------------------------------------------------
+
 PROJECT_ROOT = Path(__file__).parent
 OUTPUT_DIR   = PROJECT_ROOT / "outputs"
 TERRAIN_FILE = PROJECT_ROOT / "terrain.json"
 SENSOR_FILE  = PROJECT_ROOT / "sensor_map.json"
 
-# ---------------------------------------------------------------------------
+
 # Grid / world parameters
-# ---------------------------------------------------------------------------
+
 # Canonical world-convention constants — shared with Threat Modeling team.
 CELL_SIZE_M: int        = 100          # metres per cell (one side)
 
@@ -49,9 +49,9 @@ GRID_SIZE: Tuple[int, int] = (GRID_WIDTH_CELLS, GRID_HEIGHT_CELLS)  # (cols, row
 CELL_RESOLUTION: int       = CELL_SIZE_M
 COORDINATE_SYSTEM: str     = "local_grid"
 
-# ---------------------------------------------------------------------------
+
 # Terrain generation — synthetic noise parameters
-# ---------------------------------------------------------------------------
+
 TERRAIN_SEED: int = 42          # reproducible runs; change for variety
 
 # Elevation smoothing: larger sigma → smoother hills
@@ -81,9 +81,9 @@ TERRAIN_TYPE_LABELS: Dict[int, str] = {
     4: "mountain",
 }
 
-# ---------------------------------------------------------------------------
+
 # Threat-sensor type definitions
-# ---------------------------------------------------------------------------
+
 # Keyed by threat_type string — the canonical term used throughout v2.
 #
 # Each entry carries:
@@ -116,16 +116,16 @@ SENSOR_DEFINITIONS: Dict[str, Dict] = {
     },
 }
 
-# ---------------------------------------------------------------------------
+
 # Placement-suitability weight configurations
-# ---------------------------------------------------------------------------
+
 # Structure:  threat_type → { layer_name: weight, ... }
 #
 # Weights within each threat_type are normalised to sum = 1 inside
 # placement_engine.py, so only relative magnitudes matter here.
 #
 # FUTURE extension points
-# -----------------------
+
 # Replace these hardcoded dicts with outputs from any of:
 #   • AHP (Analytic Hierarchy Process) matrices
 #   • Literature-derived weight tables
@@ -156,8 +156,8 @@ SENSOR_WEIGHTS: Dict[str, Dict[str, float]] = {
     },
 }
 
-# ---------------------------------------------------------------------------
+
 # Visualisation settings
-# ---------------------------------------------------------------------------
+
 FIGURE_DPI: int = 120
 SENSOR_MARKER_SIZE: int = 100   # scatter plot s= parameter

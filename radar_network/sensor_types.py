@@ -1,10 +1,9 @@
 """
 sensor_types.py
----------------
 Dataclasses that represent threat-sensor instances and placement requests.
 
 v2.0 changes
-~~~~~~~~~~~~
+
 * Sensor  → ThreatSensor
 * sensor_type → threat_type
 * x/y → x_cell/y_cell  (grid coords) + x_m/y_m (metric coords)
@@ -15,7 +14,7 @@ Keeping type definitions here means downstream modules — Threat Modeler,
 Route Planner, exporter — can import them without pulling in heavy deps.
 
 FUTURE extension points
-~~~~~~~~~~~~~~~~~~~~~~~
+
 * Add coverage_model field (callable) for sensor-specific footprint shapes.
 * Add detection_curve (probability vs range) for threat modelling.
 * Add power_consumption, maintenance_interval for logistics optimisation.
@@ -28,9 +27,9 @@ from typing import Any, Dict, List, Optional
 import config
 
 
-# ---------------------------------------------------------------------------
+
 # Individual threat-sensor instance (placed on the grid)
-# ---------------------------------------------------------------------------
+
 
 @dataclass
 class ThreatSensor:
@@ -93,9 +92,9 @@ class ThreatSensor:
         }
 
 
-# ---------------------------------------------------------------------------
+
 # Placement request: what the user asked for
-# ---------------------------------------------------------------------------
+
 
 @dataclass
 class PlacementRequest:

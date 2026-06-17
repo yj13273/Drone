@@ -1,25 +1,25 @@
 """
 terrain_generator.py
---------------------
+
 Generates a synthetic multi-layer terrain and writes it to terrain.json.
 
 Design goals
-~~~~~~~~~~~~
+
 * All randomness is seeded via config.TERRAIN_SEED for reproducibility.
 * Each layer is a flat Python list-of-lists (JSON-serialisable).
 * The JSON schema is designed so that a future terrain_loader.py can load
   real GIS data in the same format with zero changes to downstream modules.
 
 Layers produced
-~~~~~~~~~~~~~~~
-  elevation            – Gaussian-smoothed noise, normalised 0-1.
-  terrain_type         – Integer category grid (0=water … 4=mountain).
-  strategic_importance – Sum-of-Gaussians importance surface, normalised 0-1.
-  visibility_modifier  – Derived from elevation + terrain_type, normalised 0-1.
-  nfz                  – Binary mask, 1 = No-Fly Zone.
+
+  elevation             Gaussian-smoothed noise, normalised 0-1.
+  terrain_type          Integer category grid (0=water … 4=mountain).
+  strategic_importance  Sum-of-Gaussians importance surface, normalised 0-1.
+  visibility_modifier   Derived from elevation + terrain_type, normalised 0-1.
+  nfz                   Binary mask, 1 = No-Fly Zone.
 
 FUTURE extension points
-~~~~~~~~~~~~~~~~~~~~~~~
+
 * Replace `_generate_elevation` with a real DEM reader (GeoTIFF / HDF5).
 * Replace `_classify_terrain_type` with a land-use raster import.
 * Add layers: slope, aspect, LOS_mask, radar_shadow, acoustic_attenuation.
@@ -34,9 +34,9 @@ from typing import Dict, List
 import config
 
 
-# ---------------------------------------------------------------------------
+
 # Public entry point
-# ---------------------------------------------------------------------------
+
 
 def generate_and_save(output_path: Path = config.TERRAIN_FILE) -> Dict:
     """
@@ -75,9 +75,9 @@ def generate_and_save(output_path: Path = config.TERRAIN_FILE) -> Dict:
     return terrain
 
 
-# ---------------------------------------------------------------------------
+
 # Layer generators (private)
-# ---------------------------------------------------------------------------
+
 
 def _generate_elevation(rng: np.random.Generator, rows: int, cols: int) -> np.ndarray:
     """
@@ -196,9 +196,9 @@ def _generate_nfz(rows: int, cols: int) -> np.ndarray:
     return nfz
 
 
-# ---------------------------------------------------------------------------
+
 # Utility
-# ---------------------------------------------------------------------------
+
 
 def _normalise(arr: np.ndarray) -> np.ndarray:
     """Min-max normalise to [0, 1]."""
