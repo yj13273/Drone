@@ -1,12 +1,12 @@
 """
 exporter.py
------------
+
 Serialises the placed ThreatSensor list to sensor_map.json.
 
 v2.0 changes
-~~~~~~~~~~~~
-* Sensor → ThreatSensor throughout
-* sensor_type → threat_type in sensor counts
+
+* Sensor - ThreatSensor throughout
+* sensor_type - threat_type in sensor counts
 * Full metadata block added:
     - placement_engine_version, placement_method
     - terrain_source, cell_size_m
@@ -19,7 +19,7 @@ Kept as a separate module so the export format can evolve independently
 of the placement engine and visualisation layers.
 
 FUTURE extension points
-~~~~~~~~~~~~~~~~~~~~~~~
+
 * Export to GeoJSON (with real coordinates after CRS is added).
 * Export to KML for Google Earth overlay.
 * Export coverage raster alongside sensor locations.
@@ -52,18 +52,18 @@ def save_sensor_map(sensors: List[ThreatSensor],
     """
     sensor_map = {
         "metadata": {
-            # ── Engine provenance ─────────────────────────────────────────
+            #  Engine provenance 
             "placement_engine_version": _ENGINE_VERSION,
             "placement_method":         _PLACEMENT_METHOD,
             "terrain_source":           _TERRAIN_SOURCE,
 
-            # ── World geometry ────────────────────────────────────────────
+            # World geometry
             "cell_size_m":  config.CELL_SIZE_M,
             "grid_size":    list(config.GRID_SIZE),           # [cols, rows]
             "world_size_m": [config.WORLD_WIDTH_M,
                              config.WORLD_HEIGHT_M],          # [10000, 10000]
 
-            # ── Coordinate convention ─────────────────────────────────────
+            # Coordinate convention 
             # Explicit so downstream teams cannot misinterpret orientation.
             "coordinate_system": config.COORDINATE_SYSTEM,
             "coordinate_convention": {
@@ -73,11 +73,11 @@ def save_sensor_map(sensors: List[ThreatSensor],
                 "cell_size_m": config.CELL_SIZE_M,
             },
 
-            # ── LOS / downstream compatibility flags ──────────────────────
+            # LOS / downstream compatibility flags 
             "los_compatible":    True,   # elevation data present per sensor
             "elevation_provided": True,  # ThreatSensor.elevation is populated
 
-            # ── Sensor counts ─────────────────────────────────────────────
+            #  Sensor counts
             "total_sensors": len(sensors),
             "sensor_counts": {
                 tt: sum(1 for s in sensors if s.threat_type == tt)

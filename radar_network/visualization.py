@@ -1,18 +1,18 @@
 """
 visualization.py
-----------------
+
 All matplotlib figure generation for the UAV sensor placement project.
 
 v2.0 changes
-~~~~~~~~~~~~
-* Sensor → ThreatSensor throughout
-* sensor_type → threat_type throughout
+
+* Sensor - ThreatSensor throughout
+* sensor_type - threat_type throughout
 * Placement figure legend title updated to "Threat Type"
 * Sensor positions read from x_cell / y_cell (replaces x / y)
 * No visual redesign — all existing plots retained unchanged
 
 Figures produced
-~~~~~~~~~~~~~~~~
+
 1. terrain_type.png          — categorical terrain-type map
 2. elevation.png             — continuous elevation heatmap
 3. strategic_importance.png  — importance surface
@@ -21,13 +21,13 @@ Figures produced
 6. sensor_placement.png      — final placement map with all sensor overlays
 
 Design
-~~~~~~
+
 * Each figure is saved to config.OUTPUT_DIR.
 * Functions are stateless — pass in data, get a saved file.
 * Figure/axis creation is separated from data logic for testability.
 
 FUTURE extension points
-~~~~~~~~~~~~~~~~~~~~~~~
+
 * Add viewshed / LOS coverage overlay to sensor_placement figure.
 * Add radar range rings around radar sensors.
 * Export interactive HTML via plotly (swap render backend).
@@ -52,9 +52,9 @@ _TERRAIN_COLOURS = ["#4A90D9", "#A8D5A2", "#2D6A4F", "#888888", "#8B5E3C"]
 _TERRAIN_CMAP    = ListedColormap(_TERRAIN_COLOURS)
 
 
-# ---------------------------------------------------------------------------
+
 # Public API
-# ---------------------------------------------------------------------------
+
 
 def save_all(terrain_layers:   Dict[str, np.ndarray],
              suitability_maps: Dict[str, np.ndarray],
@@ -64,7 +64,7 @@ def save_all(terrain_layers:   Dict[str, np.ndarray],
     Render and save every figure.
 
     Parameters
-    ----------
+    
     terrain_layers   : {layer_name: 2-D array}
     suitability_maps : {threat_type: 2-D suitability array}
     sensors          : list of placed ThreatSensor objects
@@ -86,9 +86,9 @@ def save_all(terrain_layers:   Dict[str, np.ndarray],
     print(f"[visualization] All figures saved to {output_dir}")
 
 
-# ---------------------------------------------------------------------------
+
 # Individual figure functions (private)
-# ---------------------------------------------------------------------------
+
 
 def _plot_terrain_type(tt: np.ndarray, out: Path) -> None:
     fig, ax = plt.subplots(figsize=(7, 6), dpi=config.FIGURE_DPI)
@@ -192,9 +192,9 @@ def _plot_sensor_placement(elev:    np.ndarray,
     _save(fig, out / "sensor_placement.png")
 
 
-# ---------------------------------------------------------------------------
+
 # Utility
-# ---------------------------------------------------------------------------
+
 
 def _save(fig: plt.Figure, path: Path) -> None:
     fig.tight_layout()

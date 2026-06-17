@@ -1,10 +1,9 @@
 """
 placement_engine.py
--------------------
 Core threat-sensor placement logic.
 
 v2.0 changes
-~~~~~~~~~~~~
+
 * Sensor → ThreatSensor throughout
 * sensor_type → threat_type throughout
 * ThreatSensor now populated with x_cell/y_cell, x_m/y_m, elevation, metadata
@@ -12,7 +11,7 @@ v2.0 changes
 * Placement method / version recorded in ThreatSensor.metadata
 
 Pipeline per threat type
-~~~~~~~~~~~~~~~~~~~~~~~~
+
 1. Build a placement-suitability map by taking a weighted sum of terrain layers.
 2. Mask out cells that violate hard constraints (NFZ, out-of-bounds).
 3. Greedily select cells: pick highest score → enforce minimum separation →
@@ -20,13 +19,13 @@ Pipeline per threat type
 4. Return ThreatSensor objects for export and visualisation.
 
 Architecture hook for future weight methods
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 `build_suitability_map(terrain, weights)` accepts any `weights` dict.
 To plug in AHP, optimisation, or literature-derived weights, replace what
 `_get_weights()` returns — no other changes needed.
 
 FUTURE extension points
-~~~~~~~~~~~~~~~~~~~~~~~
+
 * MCLP (Maximum Coverage Location Problem) batch placement.
 * LOS / viewshed constraint masking before greedy selection.
 * Genetic algorithm replacing the greedy selector.
@@ -45,9 +44,7 @@ _ENGINE_VERSION    = "2.0"
 _PLACEMENT_METHOD  = "weighted_greedy"
 
 
-# ---------------------------------------------------------------------------
 # Public interface
-# ---------------------------------------------------------------------------
 
 def place_all_sensors(terrain: TerrainData,
                       request: PlacementRequest) -> List[ThreatSensor]:
@@ -55,7 +52,7 @@ def place_all_sensors(terrain: TerrainData,
     Place all requested threat sensors and return the full sensor list.
 
     Parameters
-    ----------
+    
     terrain : loaded TerrainData
     request : PlacementRequest with per-type counts
     """
@@ -119,12 +116,12 @@ def build_suitability_map(terrain: TerrainData,
     Compute a normalised weighted-sum suitability map.
 
     Parameters
-    ----------
+    
     terrain : TerrainData
     weights : {layer_name: weight}  (need not sum to 1 — normalised internally)
 
     Returns
-    -------
+    
     2-D float32 array in [0, 1]
 
     FUTURE: add non-linear combination models (multiplicative, fuzzy logic).
@@ -144,9 +141,9 @@ def build_suitability_map(terrain: TerrainData,
     return _normalise(score)
 
 
-# ---------------------------------------------------------------------------
+
 # Greedy placement
-# ---------------------------------------------------------------------------
+
 
 def _greedy_place(suitability: np.ndarray,
                   nfz:         np.ndarray,
@@ -157,7 +154,7 @@ def _greedy_place(suitability: np.ndarray,
     separation distance and avoiding NFZ cells.
 
     Algorithm
-    ---------
+    
     1. Mask out NFZ cells.
     2. Flatten and sort indices by score (descending).
     3. Iterate: accept cell if it satisfies min_sep from already-placed cells.
@@ -197,9 +194,9 @@ def _greedy_place(suitability: np.ndarray,
     return placed
 
 
-# ---------------------------------------------------------------------------
+
 # Weight resolution
-# ---------------------------------------------------------------------------
+
 
 def _get_weights(threat_type: str) -> Dict[str, float]:
     """
@@ -263,9 +260,9 @@ def _compute_layer_scores(terrain: TerrainData,
     return {name: _resolve_layer(terrain, name) for name in weights}
 
 
-# ---------------------------------------------------------------------------
+
 # Utility
-# ---------------------------------------------------------------------------
+
 
 def _normalise(arr: np.ndarray) -> np.ndarray:
     lo, hi = arr.min(), arr.max()
@@ -274,9 +271,9 @@ def _normalise(arr: np.ndarray) -> np.ndarray:
     return (arr - lo) / (hi - lo)
 
 
-# ---------------------------------------------------------------------------
+
 # Suitability map getter (for visualisation)
-# ---------------------------------------------------------------------------
+
 
 def get_all_suitability_maps(terrain: TerrainData) -> Dict[str, np.ndarray]:
     """
