@@ -198,6 +198,10 @@ if __name__ == "__main__":
     tg.classify_terrain()
     tg.calculate_slope()
     cost_map = tg.generate_cost_map()
+
+    height_matrix = tg.terrain
+    print(f"[DATA] Height Matrix Shape: {height_matrix.shape}")
+    print(height_matrix)
     
     print(f"[SUCCESS] Terrain processing complete.")
     print(f" -> Minimum Elevation Found   : {tg.terrain.min():.2f} m")
