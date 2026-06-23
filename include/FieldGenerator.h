@@ -1,52 +1,50 @@
 #pragma once
-#include <vector>
-#include <memory>
-#include <string>
+
 #include "States.h"
 #include "Threats.h"
+#include "Config.h"
 
-struct NoFlyZone {
-    double x_m, y_m;
-    double radius_sq_m;
-};
+#include <vector>
+#include <thread>
 
-class FieldGenerator {
+class FieldGenerator
+{
 private:
-    int width;
-    int height;
-    
-    // Physical scale linkage
-    static constexpr double CELL_SIZE = 100.0; // 1 cell = 100 meters
 
-    std::vector<double> terrain_grid; 
-    
-    // Isolated Probability Fields
-    std::vector<double> radar_field;
-    std::vector<double> ir_field;
-    std::vector<double> acoustic_field;
-    std::vector<double> visual_field;
-    std::vector<double> wind_field;
-    
-    // Constraint Masks
+    TerrainData terrain;
+    std::vector<SensorSite> sensors;
+    SimulationConfig config;
+    std::vector<NFZTriangle> nfzs;
+    std::vector<double> final_cost;
     std::vector<bool> nfz_mask;
 
-    std::vector<std::unique_ptr<Threat>> active_threats;
-    std::vector<NoFlyZone> nfzs;
+    void buildNFZMask();
 
-    void calculateChunk(int start_y, int end_y, double drone_z_m, const DroneState& drone, const EnvState& env);
+    bool pointInsideTriangle(
+        int px,
+        int py,
+        const NFZTriangle& t) const;
+
+    void calculateChunk(
+        int start_y,
+        int end_y,
+        const DroneState& drone,
+        const EnvState& env);
 
 public:
-    FieldGenerator(int w = 100, int h = 100);
+    FieldGenerator(
+        const TerrainData& terrain,
+        const std::vector<SensorSite>& sensors,
+        const std::vector<NFZTriangle>& nfzs);
 
-    void setTerrain(const std::vector<double>& terrain);
+    void generate(
+        const DroneState& drone,
+        const EnvState& env,
+        int num_threads);
 
-    void addRadar(double x_m, double y_m, double z_m, double r0, double max_range, double diff_k, double mask_thresh);
-    void addIR(double x_m, double y_m, double z_m, double max_range, double k_ir);
-    void addAcoustic(double x_m, double y_m, double z_m, double max_range, double k_ac);
-    void addVisual(double x_m, double y_m, double z_m, double max_range, double k_vis);
-    void addNoFlyZone(double x_m, double y_m, double radius_m);
+    void exportCostMatrix(
+        const std::string& filename) const;
 
-    void generateFieldsAtZ(double drone_z_m, const DroneState& drone, const EnvState& env, int num_threads = 4);
-    
-    void exportFieldsToCSV(const std::string& prefix) const;
+    const std::vector<double>&
+    getCostMatrix() const;
 };

@@ -1,71 +1,159 @@
+#include "../include/Config.h"
+#include "../include/CSVLoader.h"
+#include "../include/DroneDatabase.h"
+#include "../include/FieldGenerator.h"
+
 #include <iostream>
 #include <thread>
-#include <string>
-#include <vector>
-#include "../include/States.h"
-#include "../include/FieldGenerator.h"
-#include "../include/DroneDatabase.h"
+#include <filesystem>
 
-int main() {
-    std::cout << "=== UAV Independent Probability Field Generator ===\n\n";
+int main()
+{
+    try
+    {
+        std::cout
+            << "=====================================\n"
+            << " UAV Probability Field Generator\n"
+            << "=====================================\n\n";
+        std::cout
+            << "[1/5] Loading terrain...\n";
 
-    // 1. DATA INGESTION
-    DroneDatabase db;
-    std::string active_drone_name = "MQ-9 Reaper";
-    
-    double static_cruise_speed = 130.0; 
-    double static_heading = 0.0;       
-    double static_flight_altitude = 500.0; // 500 meters altitude
-    
-    std::cout << "[Ingestion] Fetching profile for: " << active_drone_name << "\n";
-    DroneState active_drone = db.ingestAndSynthesize(active_drone_name, static_cruise_speed, static_heading);
+        TerrainData terrain =
+            CSVLoader::loadTerrain(
+                "data/terrain_height.csv",
+                "data/terrain_type.csv");
+        
+        std::cout
+            << "[2/5] Loading sensors...\n";
 
-    EnvState active_env;
-    active_env.air_density = 1.225; 
-    active_env.wind_speed = 8.0;    
-    active_env.ir_gamma = 0.05;      
-    active_env.ir_c_bg = 0.8;        
-    active_env.n_bg = 4.0;           
-    active_env.visual_lux = 0.5;     
-    active_env.visual_c_bg = 0.2;    
+        std::vector<SensorSite> sensors =
+            CSVLoader::loadSensors(
+                "data/sensor.csv");
 
-    // 100x100 grid. At CELL_SIZE=100m, this is a 10km x 10km map.
-    int grid_width = 100;
-    int grid_height = 100;
-    FieldGenerator field_gen(grid_width, grid_height);
+        std::cout
+            << "[3/5] Loading NFZs...\n";
 
-    // Mock Terrain Injection (Flat at 0m, with a 300m mountain in the center)
-    std::vector<double> mock_terrain(grid_width * grid_height, 0.0);
-    for(int y = 40; y < 60; ++y) {
-        for(int x = 40; x < 60; ++x) {
-            mock_terrain[y * grid_width + x] = 300.0;
+        std::vector<NFZTriangle> nfzs =
+            CSVLoader::loadNFZ(
+                "data/nfz.csv");
+
+        std::cout
+            << "[4/5] Loading environment...\n";
+
+        EnvState env =
+            CSVLoader::loadEnvironment(
+                "data/env.csv");
+
+        // =====================================================
+        // LOAD DRONE
+        // =====================================================
+
+        std::cout
+            << "[5/5] Loading drone profile...\n";
+
+        DroneDatabase db;
+
+        DroneState drone =
+            db.getDrone(
+                "MQ-9 Reaper",
+                130.0,
+                0.0);
+
+        // =====================================================
+        // PRINT SUMMARY
+        // =====================================================
+
+        std::cout << "\n";
+
+        std::cout
+            << "Grid Size     : "
+            << terrain.width
+            << " x "
+            << terrain.height
+            << "\n";
+
+        std::cout
+            << "Sensors       : "
+            << sensors.size()
+            << "\n";
+
+        std::cout
+            << "NFZs          : "
+            << nfzs.size()
+            << "\n";
+
+        std::cout
+            << "Drone         : "
+            << drone.name
+            << "\n";
+
+        std::cout
+            << "Simulation Z  : "
+            << Config::SIMULATION_Z
+            << "\n";
+
+        // =====================================================
+        // THREAD CONFIG
+        // =====================================================
+
+        int num_threads =
+            static_cast<int>(
+                std::thread::hardware_concurrency());
+
+        if(num_threads <= 0)
+        {
+            num_threads =
+                Config::DEFAULT_THREADS;
         }
+
+        std::cout
+            << "Threads       : "
+            << num_threads
+            << "\n\n";
+
+        // =====================================================
+        // GENERATOR
+        // =====================================================
+
+        FieldGenerator generator(
+            terrain,
+            sensors,
+            nfzs
+        );
+
+        std::cout
+            << "Generating probability field...\n";
+
+        generator.generate(
+            drone,
+            env,
+            num_threads);
+
+        // =====================================================
+        // EXPORT
+        // =====================================================
+
+        std::cout
+            << "Writing final_cost.csv...\n";
+
+        generator.exportCostMatrix(
+            "final_cost.csv");
+        std::cout
+    << "\nOutput written to:\n"
+    << std::filesystem::absolute("final_cost.csv")
+    << "\n";
+        std::cout
+            << "\nCompleted Successfully.\n";
+
+        return 0;
     }
-    field_gen.setTerrain(mock_terrain);
+    catch(const std::exception& e)
+    {
+        std::cerr
+            << "\nFatal Error: "
+            << e.what()
+            << "\n";
 
-    // Coordinates are now explicitly in METERS. 
-    field_gen.addRadar(5000.0, 5000.0, 0.0, 4000.0, 16000.0, 0.15, 20.0);   
-    field_gen.addIR(5000.0, 5000.0, 0.0, 10000.0, 1000.0);     
-    
-    // NFZ at 3km, 3km with an 800m radius
-    field_gen.addNoFlyZone(3000.0, 3000.0, 800.0); 
-
-    // 2. COMPUTATION
-    unsigned int hardware_concurrency = std::thread::hardware_concurrency();
-    int active_workers = (hardware_concurrency > 0) ? hardware_concurrency : 4;
-
-    std::cout << "\n[Compute] Generating Independent Fields (" << grid_width << "x" << grid_height << ")...\n";
-    std::cout << "          -> Utilizing " << active_workers << " parallel threads.\n";
-    
-    field_gen.generateFieldsAtZ(static_flight_altitude, active_drone, active_env, active_workers);
-
-    // 3. DATA EJECTION PIPELINE
-    std::cout << "\n[Ejection] Formatting fields to CSVs...\n";
-    
-    std::string prefix = "fields_" + active_drone.uav_class;
-    field_gen.exportFieldsToCSV(prefix);
-
-    std::cout << "Pipeline completed successfully.\n";
-
-    return 0;
+        return -1;
+    }
 }
