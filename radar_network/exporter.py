@@ -14,7 +14,7 @@ Each sensor entry follows this schema:
       "y_m":           4500.0,
       "elevation_m":   823.4,
       "terrain_class": "Mountain",
-      "suitability":   0.9134
+      "suitability":   0.9134 
     }
 
 Metric conversion: x_m = col * cell_size_m,  y_m = row * cell_size_m
@@ -37,7 +37,7 @@ The top-level JSON object also includes a run metadata block:
 
 from __future__ import annotations
 
-import json
+import csv
 import os
 from typing import Dict, List
 
@@ -63,38 +63,30 @@ class Exporter:
         os.makedirs(os.path.dirname(cfg.export.output_file), exist_ok=True)
 
     def export(self, placed: List[PlacedSensor], seed: int) -> str:
-        """
-        Write sensor_map.json and return the output file path.
-
-        Parameters
-        ----------
-        placed : list of PlacedSensor objects from PlacementEngine.
-        seed   : the terrain generation seed used for this run (for metadata).
-        """
+        path = self.cfg.export.output_file.rsplit('.', 1)[0] + ".csv"
+        
+        gs = self.tg.grid_size
         cell_m = self.cfg.export.cell_size_m
-        gs     = self.tg.grid_size
-
-        # Per-type sensor counts
-        counts: Dict[str, int] = {}
-        for st in SENSOR_TYPES:
-            counts[st.name] = sum(1 for p in placed if p.sensor_type == st.name)
-
-        payload = {
-            "metadata": {
-                "grid_size":     gs,
-                "cell_size_m":   cell_m,
-                "coverage_km2":  round((gs * cell_m / 1000) ** 2, 2),
-                "total_sensors": len(placed),
-                "active_nfzs":   len(self.lb.active_nfzs),
-                "seed":          seed,
-                "sensor_counts": counts,
-            },
-            "sensors": [p.to_dict() for p in placed],
-        }
-
-        path = self.cfg.export.output_file
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
+        coverage = round((gs * cell_m / 1000) ** 2, 2)
+        sensor_dicts = [p.to_dict() for p in placed]
+        
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            
+            writer.writerow(["--- METADATA ---"])
+            writer.writerow(["grid_size", gs])
+            writer.writerow(["cell_size_m", cell_m])
+            writer.writerow(["coverage_km2", coverage])
+            writer.writerow(["total_sensors", len(placed)])
+            writer.writerow(["active_nfzs", len(self.lb.active_nfzs)])
+            writer.writerow(["seed", seed])
+            writer.writerow([])
+            if sensor_dicts:
+                writer.writerow(["--- SENSORS ---"])
+                header = sensor_dicts[0].keys()
+                writer.writerow(header) 
+                for p_dict in sensor_dicts:
+                    writer.writerow(p_dict.values()) 
 
         return path
 
@@ -135,22 +127,10 @@ if __name__ == "__main__":
     path = exporter.export(placed, seed=seed)
     print(f"Exported → {path}")
 
-    # Verify JSON structure
-    with open(path) as f:
-        data = json.load(f)
-
-    assert "metadata" in data and "sensors" in data
-    assert data["metadata"]["total_sensors"] == len(placed)
-    assert data["metadata"]["coverage_km2"]  == 100.0
-    assert len(data["sensors"])              == len(placed)
-
-    required = {'id','sensor_type','label','row','col',
-                'x_m','y_m','elevation_m','terrain_class','suitability'}
-    for entry in data["sensors"]:
-        assert required.issubset(entry.keys()), f"Missing keys in {entry}"
-
-    print(f"PASS  {len(data['sensors'])} sensors, all keys present")
-    print(f"PASS  coverage_km2 = {data['metadata']['coverage_km2']}")
-    print(f"PASS  sensor_counts = {data['metadata']['sensor_counts']}")
-    print(json.dumps(data["sensors"][0], indent=2))
-    print("\nAll exporter.py checks passed.")
+    with open(path, "r") as f:
+        reader = list(csv.reader(f))
+        assert reader[6][1] == str(seed), "Seed mismatch in CSV"
+        sensor_data = reader[10:] 
+        assert len(sensor_data) == len(placed)
+    
+    print("PASS: CSV structure verified.")
