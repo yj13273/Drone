@@ -2,14 +2,10 @@
 terrain_generator.py
 ====================
 
-Generates:
+Minecraft/Chunkbase-style terrain generator.
 
-terrain_height.csv
-terrain_type.csv
-
-World Model
------------
-100 x 100 x 100
+World Model:
+    100 x 100 x 100
 
 X,Y:
     0..99
@@ -20,17 +16,9 @@ Z:
 1 XY unit = 1 km
 1 Z unit = 100 m
 
-Outputs
---------
-height_map:
-    z coordinate values
-
-terrain_map:
-    terrain enum values
-
-No placement logic.
-No sensor logic.
-No probability logic.
+Output:
+    height_map  -> z values
+    terrain_map -> terrain class ids
 """
 
 from __future__ import annotations
@@ -39,6 +27,7 @@ import random
 
 import noise
 import numpy as np
+from scipy.ndimage import gaussian_filter
 
 from config.terrain_config import TerrainConfig
 from terrain.terrain_constants import *
@@ -52,28 +41,23 @@ class TerrainGenerator:
     ):
 
         self.cfg = cfg
-
         self.seed = cfg.seed
 
-        np.random.seed(self.seed)
-        random.seed(self.seed)
+        if self.seed is not None:
+            np.random.seed(self.seed)
+            random.seed(self.seed)
 
         self.grid_size_x = cfg.grid_size_x
         self.grid_size_y = cfg.grid_size_y
+        self.grid_size_z = cfg.grid_size_z
 
         self.height_map = np.zeros(
-            (
-                self.grid_size_x,
-                self.grid_size_y
-            ),
+            (self.grid_size_x, self.grid_size_y),
             dtype=np.uint8
         )
 
         self.terrain_map = np.zeros(
-            (
-                self.grid_size_x,
-                self.grid_size_y
-            ),
+            (self.grid_size_x, self.grid_size_y),
             dtype=np.uint8
         )
 
@@ -89,358 +73,283 @@ class TerrainGenerator:
 
         self.high_ground_positions = []
 
+        self.elevation_noise = None
+        self.continentalness_noise = None
+        self.moisture_noise = None
+        self.erosion_noise = None
+
     # --------------------------------------------------
-    # Base Terrain
+    # Noise Utility
     # --------------------------------------------------
 
-    def generate_base_heightmap(
+    def _noise_map(
         self,
-        scale=40.0,
-        octaves=6,
-        persistence=0.5,
-        lacunarity=2.0
+        scale,
+        octaves,
+        persistence,
+        lacunarity,
+        seed_offset
     ):
 
-        terrain = np.zeros(
-            (
-                self.grid_size_x,
-                self.grid_size_y
-            ),
+        result = np.zeros(
+            (self.grid_size_x, self.grid_size_y),
+            dtype=np.float32
+        )
+
+        base_seed = 0
+
+        if self.seed is not None:
+            base_seed = int(self.seed)
+
+        for x in range(self.grid_size_x):
+            for y in range(self.grid_size_y):
+
+                result[x, y] = noise.pnoise2(
+                    x / scale,
+                    y / scale,
+                    octaves=octaves,
+                    persistence=persistence,
+                    lacunarity=lacunarity,
+                    repeatx=999999,
+                    repeaty=999999,
+                    base=base_seed + seed_offset
+                )
+
+        result -= result.min()
+
+        max_value = result.max()
+
+        if max_value > 0:
+            result /= max_value
+
+        return result
+
+    # --------------------------------------------------
+    # Minecraft-like Noise Fields
+    # --------------------------------------------------
+
+    def generate_noise_maps(
+        self
+    ):
+
+        # Broad landmass pattern
+        self.continentalness_noise = self._noise_map(
+            scale=55.0,
+            octaves=4,
+            persistence=0.5,
+            lacunarity=2.0,
+            seed_offset=10
+        )
+
+        # Base elevation detail
+        self.elevation_noise = self._noise_map(
+            scale=35.0,
+            octaves=5,
+            persistence=0.45,
+            lacunarity=2.1,
+            seed_offset=20
+        )
+
+        # Forest / dry land control
+        self.moisture_noise = self._noise_map(
+            scale=42.0,
+            octaves=4,
+            persistence=0.55,
+            lacunarity=2.0,
+            seed_offset=30
+        )
+
+        # Breaks terrain into hills/valleys
+        self.erosion_noise = self._noise_map(
+            scale=28.0,
+            octaves=4,
+            persistence=0.5,
+            lacunarity=2.2,
+            seed_offset=40
+        )
+
+    # --------------------------------------------------
+    # Height Generation
+    # --------------------------------------------------
+
+    def generate_heightmap(
+        self
+    ):
+
+        elevation = self.elevation_noise
+        continentalness = self.continentalness_noise
+        erosion = self.erosion_noise
+
+        # Minecraft-like combined terrain signal
+        combined = (
+            0.55 * elevation +
+            0.35 * continentalness +
+            0.10 * (1.0 - erosion)
+        )
+
+        # Smooth broad terrain
+        combined = gaussian_filter(
+            combined,
+            sigma=1.2
+        )
+
+        height = np.zeros_like(
+            combined,
             dtype=np.float32
         )
 
         for x in range(self.grid_size_x):
             for y in range(self.grid_size_y):
 
-                terrain[x, y] = noise.pnoise2(
-                    x / scale,
-                    y / scale,
-                    octaves=octaves,
-                    persistence=persistence,
-                    lacunarity=lacunarity,
-                    repeatx=self.grid_size_x,
-                    repeaty=self.grid_size_y,
-                    base=self.seed
-                )
+                c = continentalness[x, y]
+                e = combined[x, y]
 
-        terrain -= terrain.min()
-        terrain /= terrain.max()
+                if c < 0.28:
+                    # water
+                    height[x, y] = 0
 
-        terrain *= 12.0
+                elif e < 0.30:
+                    # lowlands / valleys
+                    height[x, y] = 2 + e * 12
 
-        self.height_map = terrain.astype(
+                elif e < 0.55:
+                    # plains
+                    height[x, y] = 5 + e * 15
+
+                elif e < 0.75:
+                    # hills
+                    height[x, y] = 10 + e * 22
+
+                else:
+                    # mountains, capped for UAV placement suitability
+                    height[x, y] = 18 + e * 30
+
+        height = gaussian_filter(
+            height,
+            sigma=1.0
+        )
+
+        height = np.clip(
+            height,
+            0,
+            45
+        )
+
+        self.height_map = height.astype(
             np.uint8
         )
-
-    # --------------------------------------------------
-    # Mountain Ranges
-    # --------------------------------------------------
-
-    def add_mountain_ranges(
-        self,
-        count
-    ):
-
-        for _ in range(count):
-
-            start_x = random.randint(10, 90)
-            start_y = random.randint(10, 90)
-
-            length = random.randint(
-                15,
-                40
-            )
-
-            angle = random.uniform(
-                0,
-                2 * np.pi
-            )
-
-            for step in range(length):
-
-                cx = int(
-                    start_x +
-                    step * np.cos(angle)
-                )
-
-                cy = int(
-                    start_y +
-                    step * np.sin(angle)
-                )
-
-                if (
-                    cx < 0 or
-                    cy < 0 or
-                    cx >= self.grid_size_x or
-                    cy >= self.grid_size_y
-                ):
-                    continue
-
-                radius = random.randint(
-                    3,
-                    6
-                )
-
-                peak_height = random.randint(
-                    self.cfg.mountain_height_min,
-                    self.cfg.mountain_height_max
-                )
-
-                for x in range(
-                    max(0, cx - radius),
-                    min(
-                        self.grid_size_x,
-                        cx + radius
-                    )
-                ):
-                    for y in range(
-                        max(0, cy - radius),
-                        min(
-                            self.grid_size_y,
-                            cy + radius
-                        )
-                    ):
-
-                        dist = np.hypot(
-                            x - cx,
-                            y - cy
-                        )
-
-                        if dist > radius:
-                            continue
-
-                        gain = (
-                            (1 - dist / radius)
-                            * peak_height
-                        )
-
-                        self.height_map[x, y] += gain
-
-        self.height_map = np.clip(
-            self.height_map,
-            0,
-            self.cfg.grid_size_z - 1
-        )
-
-    # --------------------------------------------------
-    # Water Blobs
-    # --------------------------------------------------
-
-    def add_water_clusters(
-        self,
-        count
-    ):
-
-        for _ in range(count):
-
-            sx = random.randint(0, 99)
-            sy = random.randint(0, 99)
-
-            frontier = [(sx, sy)]
-
-            target_size = random.randint(
-                80,
-                250
-            )
-
-            while frontier and target_size > 0:
-
-                x, y = frontier.pop()
-
-                if (
-                    x < 0 or
-                    y < 0 or
-                    x >= self.grid_size_x or
-                    y >= self.grid_size_y
-                ):
-                    continue
-
-                if self.water_mask[x, y]:
-                    continue
-
-                self.water_mask[x, y] = True
-
-                self.height_map[x, y] = 0
-
-                target_size -= 1
-
-                for dx, dy in [
-                    (-1, 0),
-                    (1, 0),
-                    (0, -1),
-                    (0, 1)
-                ]:
-
-                    if random.random() < 0.7:
-
-                        frontier.append(
-                            (
-                                x + dx,
-                                y + dy
-                            )
-                        )
-
-    # --------------------------------------------------
-    # Forest Blobs
-    # --------------------------------------------------
-
-    def add_forest_clusters(
-        self,
-        count
-    ):
-
-        for _ in range(count):
-
-            sx = random.randint(0, 99)
-            sy = random.randint(0, 99)
-
-            frontier = [(sx, sy)]
-
-            target_size = random.randint(
-                120,
-                350
-            )
-
-            while frontier and target_size > 0:
-
-                x, y = frontier.pop()
-
-                if (
-                    x < 0 or
-                    y < 0 or
-                    x >= self.grid_size_x or
-                    y >= self.grid_size_y
-                ):
-                    continue
-
-                if self.water_mask[x, y]:
-                    continue
-
-                if self.forest_mask[x, y]:
-                    continue
-
-                self.forest_mask[x, y] = True
-
-                target_size -= 1
-
-                for dx, dy in [
-                    (-1, 0),
-                    (1, 0),
-                    (0, -1),
-                    (0, 1)
-                ]:
-
-                    if random.random() < 0.65:
-
-                        frontier.append(
-                            (
-                                x + dx,
-                                y + dy
-                            )
-                        )
 
     # --------------------------------------------------
     # Terrain Classification
     # --------------------------------------------------
 
-    def classify_terrain(self):
+    def classify_terrain(
+        self
+    ):
 
         self.terrain_map.fill(
             PLAIN
         )
 
+        self.water_mask.fill(
+            False
+        )
+
+        self.forest_mask.fill(
+            False
+        )
+
         for x in range(self.grid_size_x):
             for y in range(self.grid_size_y):
 
-                z = self.height_map[x, y]
+                z = int(
+                    self.height_map[x, y]
+                )
 
-                if self.water_mask[x, y]:
+                continentalness = self.continentalness_noise[x, y]
+                moisture = self.moisture_noise[x, y]
+                elevation = self.elevation_noise[x, y]
+                erosion = self.erosion_noise[x, y]
+
+                if continentalness < 0.28:
 
                     self.terrain_map[x, y] = WATER
+                    self.water_mask[x, y] = True
+                    self.height_map[x, y] = 0
 
-                elif self.forest_mask[x, y]:
-
-                    self.terrain_map[x, y] = FOREST
-
-                elif z >= 18:
+                elif z >= 26 and elevation > 0.60:
 
                     self.terrain_map[x, y] = MOUNTAIN
 
-                elif z >= 10:
+                elif z >= 15:
 
                     self.terrain_map[x, y] = HILL
+
+                elif z <= 5 and erosion < 0.45:
+
+                    self.terrain_map[x, y] = VALLEY
+
+                elif moisture > 0.55 and z < 18:
+
+                    self.terrain_map[x, y] = FOREST
+                    self.forest_mask[x, y] = True
 
                 else:
 
                     self.terrain_map[x, y] = PLAIN
 
-        self.detect_valleys()
-
+        self.clean_small_artifacts()
         self.find_high_ground()
 
     # --------------------------------------------------
-    # Valley Detection
+    # Remove tiny noisy patches
     # --------------------------------------------------
 
-    def detect_valleys(self):
+    def clean_small_artifacts(
+        self
+    ):
 
-        for x in range(
-            1,
-            self.grid_size_x - 1
-        ):
-            for y in range(
-                1,
-                self.grid_size_y - 1
-            ):
+        cleaned = self.terrain_map.copy()
 
-                if (
-                    self.terrain_map[x, y]
-                    == WATER
-                ):
-                    continue
+        for x in range(1, self.grid_size_x - 1):
+            for y in range(1, self.grid_size_y - 1):
 
-                local = self.height_map[
+                local = self.terrain_map[
                     x - 1:x + 2,
                     y - 1:y + 2
                 ]
 
-                center = self.height_map[
-                    x,
-                    y
+                values, counts = np.unique(
+                    local,
+                    return_counts=True
+                )
+
+                majority = values[
+                    np.argmax(counts)
                 ]
 
-                if (
-                    center <= local.mean() - 3
-                    and
-                    center <= np.min(local) + 2
-                ):
+                if counts.max() >= 6:
+                    cleaned[x, y] = majority
 
-                    self.terrain_map[
-                        x,
-                        y
-                    ] = VALLEY
+        self.terrain_map = cleaned
+
+        self.water_mask = self.terrain_map == WATER
+        self.forest_mask = self.terrain_map == FOREST
 
     # --------------------------------------------------
     # Strategic Peaks
     # --------------------------------------------------
 
-    def find_high_ground(self):
+    def find_high_ground(
+        self
+    ):
 
         peaks = []
 
-        for x in range(
-            2,
-            self.grid_size_x - 2
-        ):
-            for y in range(
-                2,
-                self.grid_size_y - 2
-            ):
+        for x in range(2, self.grid_size_x - 2):
+            for y in range(2, self.grid_size_y - 2):
 
-                if (
-                    self.terrain_map[x, y]
-                    != MOUNTAIN
-                ):
+                if self.terrain_map[x, y] != MOUNTAIN:
                     continue
 
                 local = self.height_map[
@@ -449,17 +358,16 @@ class TerrainGenerator:
                 ]
 
                 if (
-                    self.height_map[x, y]
-                    == np.max(local)
+                    self.height_map[x, y] == np.max(local)
                     and
-                    self.height_map[x, y] >= 20
+                    self.height_map[x, y] >= 25
                 ):
 
                     peaks.append(
                         (
                             x,
                             y,
-                            self.height_map[x, y]
+                            int(self.height_map[x, y])
                         )
                     )
 
@@ -470,7 +378,7 @@ class TerrainGenerator:
 
         selected = []
 
-        min_distance = 8
+        min_distance = 10
 
         for px, py, h in peaks:
 
@@ -478,18 +386,11 @@ class TerrainGenerator:
 
             for sx, sy in selected:
 
-                if (
-                    np.hypot(
-                        px - sx,
-                        py - sy
-                    )
-                    < min_distance
-                ):
+                if np.hypot(px - sx, py - sy) < min_distance:
                     valid = False
                     break
 
             if valid:
-
                 selected.append(
                     (
                         px,
@@ -497,7 +398,7 @@ class TerrainGenerator:
                     )
                 )
 
-            if len(selected) >= 10:
+            if len(selected) >= 12:
                 break
 
         self.high_ground_positions = selected
@@ -506,23 +407,20 @@ class TerrainGenerator:
     # Full Generation
     # --------------------------------------------------
 
-    def generate(self):
+    def generate(
+        self
+    ):
 
-        self.generate_base_heightmap()
+        print("[TG] generating climate/noise maps", flush=True)
+        self.generate_noise_maps()
 
-        self.add_mountain_ranges(
-            self.cfg.num_mountain_ranges
-        )
+        print("[TG] generating heightmap", flush=True)
+        self.generate_heightmap()
 
-        self.add_water_clusters(
-            self.cfg.num_water_clusters
-        )
-
-        self.add_forest_clusters(
-            self.cfg.num_forest_clusters
-        )
-
+        print("[TG] classifying terrain", flush=True)
         self.classify_terrain()
+
+        print("[TG] done", flush=True)
 
         return (
             self.height_map,

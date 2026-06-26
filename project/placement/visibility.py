@@ -1,6 +1,6 @@
 import numpy as np
 
-from terrain_constants import *
+from terrain.terrain_constants import *
 
 class VisibilityLayerGenerator:
 
