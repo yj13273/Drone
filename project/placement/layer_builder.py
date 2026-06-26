@@ -91,11 +91,9 @@ class LayerBuilder:
         # NFZ Mask
         # --------------------------------------------------
 
-        self.nfz_mask = (
-            NFZLoader.build_mask(
-                nfz_file,
-                self.grid_size
-            )
+        self.nfz_mask = NFZLoader.build_mask(
+            nfz_file,
+            self.grid_size
         )
 
         # --------------------------------------------------

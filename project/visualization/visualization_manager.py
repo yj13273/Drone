@@ -1,11 +1,8 @@
 from visualization.terrain_plot import TerrainPlot
 from visualization.sensor_plot import SensorPlot
-
 from visualization.suitability_plot import SuitabilityPlot
 from visualization.layer_plot import LayerPlot
-
 from visualization.terrain_3d_plot import Terrain3DPlot
-
 from visualization.save_utils import SaveUtils
 
 
@@ -18,8 +15,6 @@ class VisualizationManager:
 
         self.output_dir = output_dir
 
-    # ----------------------------------
-
     def terrain(
         self,
         terrain_map
@@ -28,8 +23,6 @@ class VisualizationManager:
         return TerrainPlot.create(
             terrain_map
         )
-
-    # ----------------------------------
 
     def sensors(
         self,
@@ -42,8 +35,6 @@ class VisualizationManager:
             sensors
         )
 
-    # ----------------------------------
-
     def suitability(
         self,
         suitability_maps
@@ -52,8 +43,6 @@ class VisualizationManager:
         return SuitabilityPlot.create(
             suitability_maps
         )
-
-    # ----------------------------------
 
     def layers(
         self,
@@ -70,8 +59,6 @@ class VisualizationManager:
             nfz_mask
         )
 
-    # ----------------------------------
-
     def terrain_3d(
         self,
         height_map
@@ -80,8 +67,6 @@ class VisualizationManager:
         return Terrain3DPlot.create(
             height_map
         )
-
-    # ----------------------------------
 
     def save(
         self,
