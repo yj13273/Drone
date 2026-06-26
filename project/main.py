@@ -8,12 +8,11 @@ from placement.nfz_generator import NFZGenerator
 from config.terrain_config import TerrainConfig
 from config.sensor_config import SensorConfig
 from config.placement_config import PlacementConfig
+from config.export_config import ExportConfig
 
-from exporter import Exporter
+from export.exporter import Exporter
 
-from visualization.visualization_manager import (
-    VisualizationManager
-)
+from visualization.visualization_manager import VisualizationManager
 
 import random
 
@@ -28,11 +27,10 @@ def main():
     # Configs
     # ----------------------------------
 
-    terrain_cfg = TerrainConfig()
-
+    terrain_cfg = TerrainConfig(seed=42)
     sensor_cfg = SensorConfig()
-
     placement_cfg = PlacementConfig()
+    export_cfg = ExportConfig()
 
     # ----------------------------------
     # Seed
@@ -41,46 +39,29 @@ def main():
     seed = terrain_cfg.seed
 
     if seed is None:
-
         seed = random.randint(
             0,
             100000
         )
 
+    terrain_cfg.seed = seed
+
     print(f"[INFO] Seed = {seed}")
 
     # ----------------------------------
     # Terrain Generation
-    # ----------------------------------
-
-    print("\n[1] Generating Terrain")
+        # ----------------------------------
+    print("[1] Generating Terrain", flush=True)
 
     tg = TerrainGenerator(
-        seed=seed
+        terrain_cfg
     )
 
-    height_map, terrain_map = (
-        tg.generate()
-    )
+    print("[DEBUG] TerrainGenerator created", flush=True)
 
-    print(
-        f"Terrain Generated "
-        f"({height_map.shape[0]}x{height_map.shape[1]})"
-    )
+    height_map, terrain_map = tg.generate()
 
-
-    #NFZ selection
-
-    selected_nfzs = NFZGenerator.generate(
-    seed=seed,
-    count=4
-    )
-
-    exporter.export(
-    sensors=placed_sensors,
-    nfz_polygons=nfz_polygons
-    )
-
+    print("[DEBUG] Terrain generated successfully", flush=True)
     # ----------------------------------
     # Export Terrain
     # ----------------------------------
@@ -89,59 +70,63 @@ def main():
 
     TerrainExporter.export(
         height_map,
-        terrain_map
+        terrain_map,
+        output_dir="outputs"
+    )
+
+    # ----------------------------------
+    # NFZ Generation + Export
+    # ----------------------------------
+
+    print("\n[3] Generating NFZs")
+
+    nfz_polygons = NFZGenerator.generate(
+        seed=seed,
+        count=4
+    )
+
+    exporter = Exporter(
+        export_cfg
+    )
+
+    exporter.export_nfz(
+        nfz_polygons
     )
 
     # ----------------------------------
     # Layer Builder
     # ----------------------------------
 
-    print("\n[3] Building Layers")
+    print("\n[4] Building Layers")
 
     lb = LayerBuilder(
-        tg
+        tg,
+        nfz_file=export_cfg.nfz_csv
     )
 
-    print(
-        "Layers Generated"
-    )
+    print("Layers Generated")
 
     # ----------------------------------
     # Sensor Counts
     # ----------------------------------
 
     sensor_counts = {
-
-        "radar":
-            sensor_cfg.radar_count,
-
-        "infrared":
-            sensor_cfg.infrared_count,
-
-        "visual":
-            sensor_cfg.visual_count,
-
-        "acoustic":
-            sensor_cfg.acoustic_count
+        "radar": sensor_cfg.radar_count,
+        "infrared": sensor_cfg.infrared_count,
+        "visual": sensor_cfg.visual_count,
+        "acoustic": sensor_cfg.acoustic_count,
     }
 
-    print(
-        "\nSensor Counts:"
-    )
+    print("\nSensor Counts:")
 
     for key, value in sensor_counts.items():
-
-        print(
-            f"  {key:<10} : {value}"
-        )
+        print(f"  {key:<10} : {value}")
 
     # ----------------------------------
     # Placement
     # ----------------------------------
 
-    print(
-        "\n[4] Running Placement Engine"
-    )
+    print("\n[5] Running Placement Engine")
 
     engine = PlacementEngine(
         tg,
@@ -153,19 +138,13 @@ def main():
         sensor_counts
     )
 
-    print(
-        f"{len(placed_sensors)} sensors placed"
-    )
+    print(f"{len(placed_sensors)} sensors placed")
 
     # ----------------------------------
     # Export Sensors
     # ----------------------------------
 
-    print(
-        "\n[5] Exporting Sensors"
-    )
-
-    exporter = Exporter()
+    print("\n[6] Exporting Sensors")
 
     exporter.export_sensors(
         placed_sensors
@@ -175,13 +154,11 @@ def main():
     # Visualization
     # ----------------------------------
 
-    print(
-        "\n[6] Generating Figures"
+    print("\n[7] Generating Figures")
+
+    viz = VisualizationManager(
+        output_dir="outputs"
     )
-
-    viz = VisualizationManager()
-
-    # Terrain
 
     fig = viz.terrain(
         terrain_map
@@ -191,8 +168,6 @@ def main():
         fig,
         "terrain.png"
     )
-
-    # Sensors
 
     fig = viz.sensors(
         terrain_map,
@@ -204,8 +179,6 @@ def main():
         "sensors.png"
     )
 
-    # Suitability
-
     fig = viz.suitability(
         lb.suitability_maps
     )
@@ -214,8 +187,6 @@ def main():
         fig,
         "suitability.png"
     )
-
-    # Layers
 
     fig = viz.layers(
         lb.elevation_layer,
@@ -229,8 +200,6 @@ def main():
         "layers.png"
     )
 
-    # Terrain 3D
-
     fig = viz.terrain_3d(
         height_map
     )
@@ -240,9 +209,7 @@ def main():
         "terrain_3d.png"
     )
 
-    print(
-        "\nFigures Saved"
-    )
+    print("\nFigures Saved")
 
     # ----------------------------------
     # Summary
@@ -252,51 +219,19 @@ def main():
     print(" RUN COMPLETE ")
     print("==============================")
 
-    print(
-        f"Seed: {seed}"
-    )
+    print(f"Seed: {seed}")
+    print(f"Sensors Placed: {len(placed_sensors)}")
 
-    print(
-        f"Sensors Placed: "
-        f"{len(placed_sensors)}"
-    )
-
-    print(
-        "Outputs:"
-    )
-
-    print(
-        "  terrain_height.csv"
-    )
-
-    print(
-        "  terrain_type.csv"
-    )
-
-    print(
-        "  sensor.csv"
-    )
-
-    print(
-        "  terrain.png"
-    )
-
-    print(
-        "  sensors.png"
-    )
-
-    print(
-        "  suitability.png"
-    )
-
-    print(
-        "  layers.png"
-    )
-
-    print(
-        "  terrain_3d.png"
-    )
-
+    print("Outputs:")
+    print("  terrain_height.csv")
+    print("  terrain_type.csv")
+    print("  sensor.csv")
+    print("  nfz.csv")
+    print("  terrain.png")
+    print("  sensors.png")
+    print("  suitability.png")
+    print("  layers.png")
+    print("  terrain_3d.png")
     print()
 
 

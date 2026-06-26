@@ -21,7 +21,6 @@ Output:
 """
 
 from __future__ import annotations
-
 import csv
 import os
 
@@ -101,29 +100,58 @@ class Exporter:
     # nfz.csv
     # --------------------------------------------------
 
-    for cid, polygon in enumerate(
-    nfz_polygons,
-    start=1
+    def export_nfz(
+        self,
+        nfz_polygons
     ):
 
-        p1 = polygon[0]
-        p2 = polygon[1]
-        p3 = polygon[2]
+        with open(
+            self.cfg.nfz_csv,
+            "w",
+            newline=""
+        ) as file:
 
-        writer.writerow([
+            writer = csv.writer(
+                file
+            )
 
-            cid,
-            "NFZ",
+            writer.writerow([
+                "Cid",
+                "type",
+                "x1",
+                "y1",
+                "z1",
+                "x2",
+                "y2",
+                "z2",
+                "x3",
+                "y3",
+                "z3"
+            ])
 
-            p1[0],
-            p1[1],
-            p1[2],
+            for cid, polygon in enumerate(
+                nfz_polygons,
+                start=1
+            ):
 
-            p2[0],
-            p2[1],
-            p2[2],
+                p1 = polygon[0]
+                p2 = polygon[1]
+                p3 = polygon[2]
 
-            p3[0],
-            p3[1],
-            p3[2]
-        ])
+                writer.writerow([
+                    cid,
+                    "NFZ",
+                    p1[0],
+                    p1[1],
+                    p1[2],
+                    p2[0],
+                    p2[1],
+                    p2[2],
+                    p3[0],
+                    p3[1],
+                    p3[2]
+                ])
+
+        print(
+            f"[EXPORT] {self.cfg.nfz_csv}"
+        )
