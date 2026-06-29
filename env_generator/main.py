@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use("Agg")
+
 from terrain.terrain_generator import TerrainGenerator
 from terrain.terrain_exporter import TerrainExporter
 

@@ -155,7 +155,8 @@ void FieldGenerator::exportCostMatrix(const std::string& filename) const {
     throw std::runtime_error("Unable to write cost matrix.");
   }
 
-  for (int y = 0; y < terrain.height; ++y) {
+  for (int row = 0; row < terrain.height; ++row) {
+    int y = terrain.height - 1 - row;
     for (int x = 0; x < terrain.width; ++x) {
       int idx = y * terrain.width + x;
 

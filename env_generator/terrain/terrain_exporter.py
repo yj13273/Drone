@@ -18,14 +18,14 @@ class TerrainExporter:
 
         np.savetxt(
             os.path.join(output_dir, "terrain_height.csv"),
-            height_map,
+            height_map.T[::-1],
             fmt="%d",
             delimiter=","
         )
 
         np.savetxt(
             os.path.join(output_dir, "terrain_type.csv"),
-            terrain_map,
+            terrain_map.T[::-1],
             fmt="%d",
             delimiter=","
         )

@@ -150,14 +150,20 @@ struct TerrainData
 
     std::vector<double> elevation;
     std::vector<uint8_t> terrain_type;
+
+    inline int rowForWorldY(int y) const
+    {
+        return height - 1 - y;
+    }
+
     inline double heightAt(int x,int y) const
     {
-        return elevation[y * width + x];
+        return elevation[rowForWorldY(y) * width + x];
     }
 
     inline uint8_t typeAt(int x,int y) const
     {
-        return terrain_type[y * width + x];
+        return terrain_type[rowForWorldY(y) * width + x];
     }
 };
 

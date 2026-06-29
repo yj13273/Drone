@@ -29,7 +29,7 @@ enum class SimulationMode { Mode25D, Mode3D };
 
 constexpr SimulationMode CURRENT_MODE = SimulationMode::Mode25D;
 
-constexpr int SIMULATION_Z = 20;
+constexpr int SIMULATION_Z = 70;
 
 // =====================================================
 // COSTS
@@ -58,12 +58,12 @@ constexpr unsigned RANDOM_SEED = 42;
 
 enum class TerrainType : uint8_t {
 
-  Plain = 0,
-  Forest = 1,
-  Hill = 2,
-  Mountain = 3,
+  Water = 0,
+  Plain = 1,
+  Forest = 2,
+  Hill = 3,
   Valley = 4,
-  Water = 5
+  Mountain = 5
 };
 
 // =====================================================

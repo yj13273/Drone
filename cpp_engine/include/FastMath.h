@@ -40,6 +40,11 @@ public:
             return std::exp(-x);
         }
 
+        if(x < 0.05)
+        {
+            return std::exp(-x);
+        }
+
         if(x >= MAX_EXP)
         {
             return 0.0;

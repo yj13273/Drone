@@ -53,15 +53,22 @@ protected:
         int tz,
         const TerrainData& terrain) const
     {
-        constexpr int STEPS = 15;
+        int steps =
+            std::max(
+                15,
+                static_cast<int>(
+                    std::ceil(
+                        std::hypot(
+                            tx - sensor.x,
+                            ty - sensor.y))) * 2);
 
         double max_clearance = -1e9;
 
-        for(int i = 1; i < STEPS; ++i)
+        for(int i = 1; i < steps; ++i)
         {
             double t =
                 static_cast<double>(i) /
-                STEPS;
+                steps;
 
             double sx =
                 sensor.x +
@@ -87,11 +94,8 @@ protected:
                     0,
                     terrain.height - 1);
 
-            int idx =
-                cy * terrain.width + cx;
-
             double terrain_z =
-                terrain.elevation[idx];
+                terrain.heightAt(cx, cy);
 
             double clearance =
                 (terrain_z - sz) *
@@ -104,6 +108,17 @@ protected:
         }
 
         return max_clearance;
+    }
+
+    double getSoftTerrainFactor(double clearance) const
+    {
+        if(clearance <= 0.0)
+        {
+            return 1.0;
+        }
+
+        return FastMath::get().exp_neg(
+            0.02 * clearance);
     }
 
 public:
@@ -247,12 +262,6 @@ public:
         {
             terrain_factor = 1.0;
         }
-        else if(
-            clearance >
-            sensor.deep_mask_threshold)
-        {
-            terrain_factor = 0.0;
-        }
         else
         {
             terrain_factor =
@@ -315,16 +324,19 @@ public:
                 tz,
                 terrain);
 
-        if(clearance > 0.0)
-            return 0.0;
+        double terrain_factor =
+            getSoftTerrainFactor(clearance);
 
         double d =
             std::sqrt(dist_sq);
 
+        double d_km =
+            d / 1000.0;
+
         double extinction =
             FastMath::get().exp_neg(
                 env.ir_gamma *
-                d);
+                d_km);
 
         double E_received =
             (
@@ -341,6 +353,7 @@ public:
                 E_received);
 
         return clamp(
+            terrain_factor *
             p_ir,
             0.0,
             1.0);
@@ -452,8 +465,8 @@ public:
                 tz,
                 terrain);
 
-        if(clearance > 0.0)
-            return 0.0;
+        double terrain_factor =
+            getSoftTerrainFactor(clearance);
 
         double optic_factor =
             (
@@ -470,6 +483,7 @@ public:
                 optic_factor);
 
         return clamp(
+            terrain_factor *
             p_vis,
             0.0,
             1.0);
