@@ -3,16 +3,16 @@ import math
 import heapq
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import List, Tuple, Dict, Set, Optional
+from typing import List, Tuple, Dict, Any
 
 class BattlefieldPathPlanner:
     """
     UAV Routing framework using A* and Theta* with a customizable threat threshold.
+    Operates on an externally provided cost matrix environment.
     """
-    def __init__(self, cost_matrix: np.ndarray, fuel_capacity: float, threat_threshold: float):
+    def __init__(self, cost_matrix: np.ndarray, threat_threshold: float):
         self.cost_matrix = cost_matrix
         self.height, self.width = cost_matrix.shape
-        self.fuel_capacity = fuel_capacity
         self.threat_threshold = threat_threshold  # Cells above this cost are blocked
         
         # 8-Directional movement offsets and kinematic weights
@@ -27,7 +27,7 @@ class BattlefieldPathPlanner:
 
     def _is_valid(self, node: Tuple[int, int]) -> bool:
         x, y = node
-        return 0 <= x < self.height and 0 <= y < self.width and self.cost_matrix[x, y] <= self.threat_threshold
+        return 0 <= x < self.height and 0 <= y < self.width and self.cost_matrix[x, y] < self.threat_threshold and not np.isinf(self.cost_matrix[x, y])
 
     def bresenham_los_cost(self, start: Tuple[int, int], end: Tuple[int, int]) -> Tuple[bool, float]:
         """Checks straight-line visibility and calculates continuous path cost."""
@@ -65,10 +65,22 @@ class BattlefieldPathPlanner:
             total_cost = (total_cost / steps) * actual_dist
         return True, total_cost
 
-    def solve(self, start: Tuple[int, int], goal: Tuple[int, int], use_theta_star: bool = True) -> Dict:
+    def plan_route(self, start: Tuple[int, int], goal: Tuple[int, int], fuel_capacity: float, use_theta_star: bool = True) -> Dict[str, Any]:
+        start_time = time.perf_counter()
+        
         if not self._is_valid(start) or not self._is_valid(goal):
-            return {"success": False, "msg": "Mission Failed: Start/Goal in lethal threat zone.", "path": np.array([]), "fuel_consumed": float('inf'), "cells_covered": 0}
+            return {
+                "success": False, 
+                "path": [], 
+                "total_cost": 0.0,
+                "fuel_consumed": 0.0, 
+                "nodes_expanded": 0,
+                "los_optimizations": 0,
+                "runtime_seconds": time.perf_counter() - start_time,
+                "msg": "Mission Failed: Start/Goal in lethal threat zone."
+            }
 
+        # Open set elements: (f_score, (row, col))
         open_set = []
         heapq.heappush(open_set, (0.0, start))
         
@@ -77,33 +89,14 @@ class BattlefieldPathPlanner:
         f_score = {start: self._euclidean_heuristic(start, goal)}
         explored_nodes = set()
         los_optimizations = 0
+        success = False
 
         while open_set:
             _, current = heapq.heappop(open_set)
             
             if current == goal:
-                path = []
-                curr = goal
-                while curr != start:
-                    path.append(curr)
-                    curr = parents[curr]
-                path.append(start)
-                path.reverse()
-                
-                fuel_consumed = g_score[goal]
-                path_length = sum(math.sqrt((path[i+1][0] - path[i][0])**2 + (path[i+1][1] - path[i][1])**2) for i in range(len(path) - 1))
-                
-                return {
-                    "success": True,
-                    "path": np.array(path),
-                    "fuel_consumed": fuel_consumed,
-                    "remaining_fuel": self.fuel_capacity - fuel_consumed,
-                    "path_length": path_length,
-                    "explored_nodes": len(explored_nodes),
-                    "cells_covered": len(path),
-                    "los_optimizations": los_optimizations,
-                    "msg": "Mission Success: Target Reached."
-                }
+                success = True
+                break
 
             if current in explored_nodes:
                 continue
@@ -132,67 +125,119 @@ class BattlefieldPathPlanner:
                     tentative_parent = current
                     is_optimized = False
 
-                if tentative_g > self.fuel_capacity:
+                # Hard Constraint: Reject paths exceeding fuel budget
+                if tentative_g > fuel_capacity:
                     continue
 
                 if neighbor not in g_score or tentative_g < g_score[neighbor]:
                     g_score[neighbor] = tentative_g
                     f_score[neighbor] = tentative_g + self._euclidean_heuristic(neighbor, goal)
                     parents[neighbor] = tentative_parent
-                    if is_optimized: los_optimizations += 1
+                    if is_optimized: 
+                        los_optimizations += 1
                     heapq.heappush(open_set, (f_score[neighbor], neighbor))
 
+        runtime = time.perf_counter() - start_time
+        
+        # Path reconstruction
+        path = []
+        if success:
+            curr = goal
+            while curr != start:
+                path.append(curr)
+                curr = parents[curr]
+            path.append(start)
+            path.reverse()
+            total_cost = g_score[goal]
+        else:
+            total_cost = 0.0
+
         return {
-            "success": False,
-            "msg": "Mission Failed: No viable route found (Fuel limit or threat blockage).",
-            "path": np.array([]),
-            "fuel_consumed": float('inf'),
-            "cells_covered": 0,
-            "explored_nodes": len(explored_nodes)
+            "success": success,
+            "path": path,
+            "total_cost": total_cost,
+            "fuel_consumed": total_cost,
+            "nodes_expanded": len(explored_nodes),
+            "los_optimizations": los_optimizations if use_theta_star else 0,
+            "runtime_seconds": runtime,
+            "msg": "Mission Success" if success else "No viable route within thresholds."
         }
 
-def generate_battlefield(size: int = 100) -> np.ndarray:
-    np.random.seed(42)
-    terrain = np.random.uniform(1.0, 5.0, (size, size))
-    threat_map = np.zeros((size, size))
-    threat_centers = [(25, 30, 15), (60, 45, 18), (40, 75, 12), (75, 20, 14)]
-    for cx, cy, r in threat_centers:
-        for x in range(max(0, cx-r), min(size, cx+r)):
-            for y in range(max(0, cy-r), min(size, cy+r)):
-                if math.sqrt((x-cx)**2 + (y-cy)**2) <= r:
-                    threat_map[x, y] += (r - math.sqrt((x-cx)**2 + (y-cy)**2)) * 15.0 
-    return terrain + threat_map
+# ==============================================================================
+# PIPELINE INTEGRATION FUNCTION
+# ==============================================================================
 
+def execute_pipeline(cost_matrix: np.ndarray, 
+                     fuel_capacity: float, 
+                     start_pos: Tuple[int, int] = (5, 5), 
+                     goal_pos: Tuple[int, int] = (90, 95),
+                     threat_threshold: float = 120.0,
+                     use_theta_star: bool = True,
+                     visualize: bool = True) -> Dict[str, Any]:
+    """
+    Primary interface for external modules. Pass your teammate's cost matrix 
+    and fuel limits straight into this function.
+    """
+    # Initialize optimization components
+    planner = BattlefieldPathPlanner(cost_matrix, threat_threshold=threat_threshold)
+    
+    # Run Routing Optimization
+    metrics = planner.plan_route(start_pos, goal_pos, fuel_capacity, use_theta_star=use_theta_star)
+    algo_name = "THETA*" if use_theta_star else "A*"
 
+    # Mission Summary Logging
+    print("\n" + "="*45)
+    print(f"            MISSION SUMMARY ({algo_name})")
+    print("="*45)
+    print(f"Total Cells Covered (Path Length): {len(metrics['path'])}")
+    print(f"Total Fuel Consumed:               {metrics['fuel_consumed']:.2f} units / {fuel_capacity:.2f} max")
+    print(f"Mission Success:                   {'SUCCESS' if metrics['success'] else 'FAILED'}")
+    print(f"Line-of-Sight Optimizations:       {metrics.get('los_optimizations', 0)}")
+    print("="*45)
+    print(f"Total Nodes Expanded:              {metrics['nodes_expanded']}")
+    print(f"Execution Runtime:                 {metrics['runtime_seconds']:.4f} seconds\n")
+
+    # Dynamic Visualization
+    if visualize and metrics['success']:
+        path_coords = np.array(metrics['path'])
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # Mirroring the layout style from the Dijkstra configuration
+        cmap = ax.imshow(cost_matrix, cmap='YlOrRd', origin='upper', vmax=threat_threshold)
+        cbar = fig.colorbar(cmap, ax=ax)
+        cbar.set_label('Threat Risk Level', rotation=270, labelpad=15)
+        
+        ax.plot(path_coords[:, 1], path_coords[:, 0], color='cyan', linewidth=3, label=f"Optimal Route ({algo_name})")
+        ax.scatter(start_pos[1], start_pos[0], color='lime', marker='^', s=150, edgecolors='black', label="Start")
+        ax.scatter(goal_pos[1], goal_pos[0], color='magenta', marker='X', s=150, edgecolors='black', label="Goal")
+        
+        ax.set_title(f"UAV Threat-Aware {algo_name} Path Planning Optimization", fontsize=12, fontweight='bold')
+        ax.legend(loc='lower right')
+        ax.grid(True, alpha=0.2)
+        plt.tight_layout()
+        plt.show()
+        
+    return metrics
+
+# ==============================================================================
+# LOCAL TESTING SUITE (Ignored when imported by your teammate)
+# ==============================================================================
 if __name__ == "__main__":
-    # Setup configuration
-    grid_size = 100
-    start_pos = (5, 5)
-    goal_pos = (90, 95)
-    allocated_fuel = 1500.0
+    print("Running local algorithm validation test...")
     
-    # --- CHANGE THIS THRESHOLD VARIABLE FOR YOUR RESEARCH ---
-    max_allowable_threat = 120.0 
+    # Mocking external matrix inputs
+    mock_cost_matrix = np.ones((100, 100)) 
+    # Create a threat bar in the grid middle
+    mock_cost_matrix[40:60, 20:80] = 150.0  
+    mock_fuel_input = 1500.0
     
-    cost_map = generate_battlefield(size=grid_size)
-    planner = BattlefieldPathPlanner(cost_map, fuel_capacity=allocated_fuel, threat_threshold=max_allowable_threat)
-    
-    # Run algorithms
-    theta_results = planner.solve(start_pos, goal_pos, use_theta_star=True)
-    a_star_results = planner.solve(start_pos, goal_pos, use_theta_star=False)
-    
-    # =================================================================
-    # EXTRACTED VARIABLES (AS REQUESTED)
-    # =================================================================
-    mission_success = theta_results["success"]       
-    total_cells_covered = theta_results["cells_covered"] 
-    total_fuel_consumed = theta_results["fuel_consumed"] 
-    
-    # Output display
-    print("\n" + "="*40)
-    print("      EXTRACTED MISSION METRICS  ")
-    print("="*40)
-    print(f"Mission Success:    {mission_success}")
-    print(f"Total Cells Covered: {total_cells_covered}")
-    print(f"Total Fuel Consumed: {total_fuel_consumed:.2f} units")
-    print("="*40 + "\n")
+    # Testing Theta* Pipeline execution
+    execute_pipeline(
+        cost_matrix=mock_cost_matrix, 
+        fuel_capacity=mock_fuel_input,
+        start_pos=(5, 5),
+        goal_pos=(90, 95),
+        threat_threshold=120.0,
+        use_theta_star=True,
+        visualize=True
+    )
