@@ -5,9 +5,10 @@ import matplotlib.pyplot as plt
 from typing import List, Tuple, Dict, Any
 
 class BattlefieldGrid:
-    def __init__(self, matrix: np.ndarray):
-        self.matrix = matrix
-        self.height, self.width = matrix.shape
+    """Manages the 2D battlefield environment, movement dynamics, and constraints."""
+    def __init__(self, cost_matrix: np.ndarray):
+        self.matrix = cost_matrix
+        self.height, self.width = cost_matrix.shape
 
     def is_valid_coordinate(self, x: int, y: int) -> bool:
         return 0 <= x < self.width and 0 <= y < self.height
@@ -31,6 +32,7 @@ class BattlefieldGrid:
 
 
 class AntColonyRoutePlanner:
+    """Executes heuristic-driven, pheromone-based threat and fuel-constrained path planning."""
     def __init__(self, 
                  grid: BattlefieldGrid, 
                  start: Tuple[int, int], 
@@ -43,7 +45,7 @@ class AntColonyRoutePlanner:
                  Q: float = 100.0,
                  fuel_capacity: float = 500.0,
                  max_path_length: int = 300,
-                 threat_threshold: float = 12.0): # Over this cost cell = path failure
+                 threat_threshold: float = 30.0):
         
         self.grid = grid
         self.start = start
@@ -80,18 +82,19 @@ class AntColonyRoutePlanner:
             unvisited = [(nx, ny, dist) for nx, ny, dist in neighbors if (nx, ny) not in visited]
             
             if not unvisited:
-                return path, total_cost, False # Dead end
+                return path, total_cost, False 
             
             probabilities = []
             valid_candidates = []
             
             for nx, ny, dist in unvisited:
-                # Check Threat Threshold restriction
-                if self.grid.matrix[ny, nx] >= self.threat_threshold:
-                    continue # Disallow paths entering critical risk zones
+                # Dynamic Check: Abort if cell exceeds maximum allowed threat threshold
+                if self.grid.matrix[ny, nx] >= self.threat_threshold or np.isinf(self.grid.matrix[ny, nx]):
+                    continue 
                     
                 step_cost = self.grid.calculate_step_cost(nx, ny, dist)
                 
+                # Hard Constraint: Reject branches that blow past our fuel limits
                 if current_fuel - step_cost >= 0:
                     tau = self.pheromones[ny, nx] ** self.alpha
                     eta = self._get_heuristic(nx, ny, dist) ** self.beta
@@ -99,10 +102,13 @@ class AntColonyRoutePlanner:
                     valid_candidates.append((nx, ny, step_cost))
             
             if not valid_candidates:
-                return path, total_cost, False # Out of fuel or blocked by threats
+                return path, total_cost, False 
             
             prob_sum = sum(probabilities)
-            probabilities = [p / prob_sum for p in probabilities] if prob_sum > 0 else [1.0/len(valid_candidates)] * len(valid_candidates)
+            if prob_sum > 0:
+                probabilities = [p / prob_sum for p in probabilities]
+            else:
+                probabilities = [1.0 / len(valid_candidates)] * len(valid_candidates)
                 
             chosen_idx = random.choices(range(len(valid_candidates)), weights=probabilities, k=1)[0]
             next_x, next_y, step_cost = valid_candidates[chosen_idx]
@@ -118,7 +124,7 @@ class AntColonyRoutePlanner:
         return path, total_cost, True
 
     def optimize(self) -> Dict[str, Any]:
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         for iteration in range(self.iterations):
             iteration_paths = []
@@ -133,13 +139,13 @@ class AntColonyRoutePlanner:
             # Pheromone Evaporation
             self.pheromones *= (1.0 - self.rho)
             
-            # Pheromone Update
+            # Pheromone Accumulation Update
             for path, cost in zip(iteration_paths, iteration_costs):
                 deposit = self.Q / cost
                 for x, y in path:
                     self.pheromones[y, x] += deposit
             
-            # Keep Track of Global Best Solution
+            # Global Best Tracking
             if iteration_costs:
                 min_iter_cost = min(iteration_costs)
                 if min_iter_cost < self.best_cost:
@@ -149,89 +155,106 @@ class AntColonyRoutePlanner:
             
             self.convergence_history.append(self.best_cost if self.best_cost != float('inf') else None)
             
-        runtime = time.time() - start_time
+        runtime = time.perf_counter() - start_time
         
-        # --- NEW EASY EXTRACTION METRICS REQUIRED ---
-        mission_success = self.best_path is not None
-        total_cells_covered = len(self.best_path) if mission_success else 0
-        total_fuel_consumed = self.best_fuel_consumed if mission_success else 0.0
+        success = self.best_path is not None
+        total_cells_covered = len(self.best_path) if success else 0
+        total_fuel_consumed = self.best_fuel_consumed if success else 0.0
         
         return {
-            "mission_success": mission_success,
-            "total_cells_covered": total_cells_covered,
-            "total_fuel_consumed": total_fuel_consumed,
-            "best_path": self.best_path,
-            "best_cost": self.best_cost,
-            "runtime": runtime,
+            "success": success,
+            "path": self.best_path if success else [],
+            "total_cost": self.best_cost if success else 0.0,
+            "fuel_consumed": total_fuel_consumed,
+            "runtime_seconds": runtime,
             "convergence_history": self.convergence_history
         }
 
 
-# ==========================================
-# RUNNABLE EXAMPLE & EXTRACTION DEMO
-# ==========================================
+# ==============================================================================
+# PIPELINE INTEGRATION FUNCTION
+# ==============================================================================
 
-def generate_battlefield(width: int = 100, height: int = 100) -> np.ndarray:
-    np.random.seed(42)
-    grid = np.ones((height, width)) * 1.0
-    threat_centers = [(25, 30, 15), (70, 40, 20), (45, 75, 18), (80, 80, 12)]
-    
-    for cx, cy, r in threat_centers:
-        for y in range(height):
-            for x in range(width):
-                dist = np.sqrt((x - cx)**2 + (y - cy)**2)
-                if dist <= r:
-                    grid[y, x] += (1.0 - (dist / r)) * 15.0 # Max threat peaks at 16.0
-                    
-    grid += np.random.uniform(0.0, 2.0, size=(height, width))
-    return grid
-
-if __name__ == "__main__":
-    # Environment Setup
-    GRID_SIZE = 100
-    START = (5, 5)
-    GOAL = (95, 95)
-    FUEL_LIMIT = 600.0
-    
-    # 1. DEFINE THRESHOLD VALUE VARIABLE HERE
-    # If any cell cost >= THREAT_THRESHOLD, it's considered unpassable/fatal threat.
-    THREAT_THRESHOLD = 11.5 
-    
-    cost_matrix = generate_battlefield(GRID_SIZE, GRID_SIZE)
+def execute_pipeline(cost_matrix: np.ndarray, 
+                     fuel_capacity: float, 
+                     start_pos: Tuple[int, int] = (10, 10), 
+                     goal_pos: Tuple[int, int] = (90, 90),
+                     threat_threshold: float = 30.0,
+                     visualize: bool = True) -> Dict[str, Any]:
+    """
+    Primary interface for external modules. Pass your teammate's cost matrix 
+    and fuel limits straight into this function.
+    """
+    # Initialize Engine components using external inputs
     battlefield = BattlefieldGrid(cost_matrix)
     
+    # Note: ACO uses (x, y) coordinates internally. 
+    # Converting row/col parameters to x/y structure -> start_pos[1], start_pos[0]
+    start_xy = (start_pos[1], start_pos[0])
+    goal_xy = (goal_pos[1], goal_pos[0])
+    
     planner = AntColonyRoutePlanner(
-        grid=battlefield, start=START, goal=GOAL,
-        num_ants=25, iterations=40, alpha=1.2, beta=2.5, rho=0.15, Q=150.0,
-        fuel_capacity=FUEL_LIMIT, max_path_length=350,
-        threat_threshold=THREAT_THRESHOLD # Pass threshold variable to model
+        grid=battlefield, 
+        start=start_xy, 
+        goal=goal_xy,
+        num_ants=30, 
+        iterations=50, 
+        alpha=1.0, 
+        beta=2.0, 
+        rho=0.1, 
+        Q=100.0,
+        fuel_capacity=fuel_capacity, 
+        max_path_length=400,
+        threat_threshold=threat_threshold
     )
     
-    # Execute Optimizer
-    results = planner.optimize()
-    
-    # 2. HOW TO EXTRACT THE THREE REQUIRED VALUES
-    cells_covered = results["total_cells_covered"]
-    fuel_used = results["total_fuel_consumed"]
-    success_status = results["mission_success"]
-    
-    # Output to user terminal
-    print("=" * 40)
-    print("        EXTRACTION OUTPUT METRICS       ")
-    print("=" * 40)
-    print(f"Total Cells Covered: {cells_covered}")
-    print(f"Total Fuel Consumed: {fuel_used:.2f}")
-    print(f"Mission Success:     {success_status}")
-    print("=" * 40)
+    # Run Routing Optimization
+    metrics = planner.optimize()
 
-    # Optional: Basic plotting block for verification
-    if success_status:
-        path_np = np.array(results['best_path'])
-        plt.figure(figsize=(6, 5))
-        plt.imshow(cost_matrix, cmap='yaml', origin='upper')
-        plt.colorbar(label='Threat Cost')
-        plt.plot(path_np[:, 0], path_np[:, 1], color='cyan', linewidth=2, label='ACO Path')
-        plt.scatter([START[0], GOAL[0]], [START[1], GOAL[1]], color=['lime','red'], marker='o', s=100)
-        plt.title('UAV ACO Route Verification')
-        plt.legend()
+    # Mission Summary Logging (Matched with Dijkstra output format)
+    print("\n" + "="*45)
+    print("              MISSION SUMMARY (ACO)")
+    print("="*45)
+    print(f"Total Cells Covered (Path Length): {len(metrics['path'])}")
+    print(f"Total Fuel Consumed:               {metrics['fuel_consumed']:.2f} units / {fuel_capacity:.2f} max")
+    print(f"Mission Success:                   {'SUCCESS' if metrics['success'] else 'FAILED'}")
+    print("="*45)
+    print(f"Execution Runtime:                 {metrics['runtime_seconds']:.4f} seconds\n")
+
+    # Dynamic Visualization (Identical layout to Dijkstra suite)
+    if visualize and metrics['success']:
+        path_coords = np.array(metrics['path'])
+        fig, ax = plt.subplots(figsize=(10, 8))
+        
+        # Displaying with origin='upper' to stay identical with Dijkstra matrix mapping
+        cmap = ax.imshow(cost_matrix, cmap='YlOrRd', origin='upper', vmax=threat_threshold)
+        cbar = fig.colorbar(cmap, ax=ax)
+        cbar.set_label('Threat Risk Level', rotation=270, labelpad=15)
+        
+        # ACO path tracks (x, y), map x to plot-X (columns) and y to plot-Y (rows)
+        ax.plot(path_coords[:, 0], path_coords[:, 1], color='cyan', linewidth=3, label="Optimal Route")
+        ax.scatter(start_pos[1], start_pos[0], color='lime', marker='^', s=150, edgecolors='black', label="Start")
+        ax.scatter(goal_pos[1], goal_pos[0], color='magenta', marker='X', s=150, edgecolors='black', label="Goal")
+        
+        ax.set_title("UAV Threat-Aware Path Planning Optimization (ACO)", fontsize=12, fontweight='bold')
+        ax.legend(loc='lower right')
+        ax.grid(True, alpha=0.2)
+        plt.tight_layout()
         plt.show()
+        
+    return metrics
+
+
+# ==============================================================================
+# LOCAL TESTING SUITE (Ignored when imported by your teammate)
+# ==============================================================================
+if __name__ == "__main__":
+    print("Running local ACO code verification test...")
+    
+    # Mocking what your teammate will send you
+    mock_cost_matrix = np.ones((100, 100)) 
+    mock_cost_matrix[40:60, 40:60] = 45.0  # Put a massive threat block in the center
+    mock_fuel_input = 600.0                # Input fuel capacity
+    
+    # Executing pipeline with identical defaults to Dijkstra's mock run
+    execute_pipeline(cost_matrix=mock_cost_matrix, fuel_capacity=mock_fuel_input)

@@ -105,88 +105,69 @@ class ThreatAwarePathPlanner:
             "runtime_seconds": runtime
         }
 
-# ==========================================
-# SIMULATION EXECUTION
-# ==========================================
+# ==============================================================================
+# PIPELINE INTEGRATION FUNCTION
+# ==============================================================================
 
-def generate_synthetic_battlefield(rows: int, cols: int, seed: int = 42) -> np.ndarray:
-    """Generates continuous risk landscape with overlapping threat zones."""
-    np.random.seed(seed)
-    grid = np.full((rows, cols), 1.0) # Base terrain cost
-    
-    # Inject localized hazard peaks (e.g., radar, SAM bubbles)
-    num_threats = 6
-    for _ in range(num_threats):
-        center_r, center_c = np.random.randint(0, rows), np.random.randint(0, cols)
-        intensity = np.random.uniform(20.0, 45.0)
-        radius = np.random.uniform(10.0, 22.0)
-        
-        for r in range(rows):
-            for c in range(cols):
-                dist_sq = (r - center_r)**2 + (c - center_c)**2
-                grid[r, c] += intensity * math.exp(-dist_sq / (2 * (radius**2)))
-                
-    return grid
-
-def run_simulation():
-    # Environment Setup
-    GRID_SIZE = (100, 100)
-    START_POS = (10, 10)
-    GOAL_POS = (90, 90)
-    FUEL_BUDGET = 500.0  
-    
-    # --- THREAT CONFIGURATION VARIABLE ---
-    # Cells with a cost equal to or higher than this value are treated as impassable/lethal.
-    # Adjust this value to calibrate risk tolerance for your research.
-    THREAT_THRESHOLD = 30.0 
-    
-    # Generate Environment
-    cost_matrix = generate_synthetic_battlefield(GRID_SIZE[0], GRID_SIZE[1], seed=101)
-    
-    # Initialize Engine
-    battlefield = BattlefieldGrid(cost_matrix, threat_threshold=THREAT_THRESHOLD)
+def execute_pipeline(cost_matrix: np.ndarray, 
+                     fuel_capacity: float, 
+                     start_pos: Tuple[int, int] = (10, 10), 
+                     goal_pos: Tuple[int, int] = (90, 90),
+                     threat_threshold: float = 30.0,
+                     visualize: bool = True) -> Dict[str, Any]:
+    """
+    Primary interface for external modules. Pass your teammate's cost matrix 
+    and fuel limits straight into this function.
+    """
+    # Initialize Engine components using external inputs
+    battlefield = BattlefieldGrid(cost_matrix, threat_threshold=threat_threshold)
     planner = ThreatAwarePathPlanner(battlefield)
     
-    # Run Router
-    metrics = planner.plan_dijkstra(START_POS, GOAL_POS, FUEL_BUDGET)
+    # Run Routing Optimization
+    metrics = planner.plan_dijkstra(start_pos, goal_pos, fuel_capacity)
 
-    total_cells_covered = len(metrics['path'])
-    total_fuel_consumed = metrics['fuel_consumed']
-    mission_success = metrics['success']
-    
-    # ==========================================
-    # REQUESTED RESEARCH OUTPUTS
-    # ==========================================
+    # Mission Summary Logging
     print("\n" + "="*45)
-    print("             MISSION SUMMARY")
+    print("              MISSION SUMMARY")
     print("="*45)
-    print(f"Total Cells Covered (Path Length): {total_cells_covered}")
-    print(f"Total Fuel Consumed:               {total_fuel_consumed:.2f} units")
-    print(f"Mission Success:                   {'SUCCESS' if mission_success else 'FAILED'}")
+    print(f"Total Cells Covered (Path Length): {len(metrics['path'])}")
+    print(f"Total Fuel Consumed:               {metrics['fuel_consumed']:.2f} units / {fuel_capacity:.2f} max")
+    print(f"Mission Success:                   {'SUCCESS' if metrics['success'] else 'FAILED'}")
     print("="*45)
-    
-    # Extended Benchmarking Diagnostics
     print(f"Total Nodes Expanded:              {metrics['nodes_expanded']}")
     print(f"Execution Runtime:                 {metrics['runtime_seconds']:.4f} seconds\n")
 
-    # Map Visualization
-    if metrics['success']:
+    # Dynamic Visualization
+    if visualize and metrics['success']:
         path_coords = np.array(metrics['path'])
         fig, ax = plt.subplots(figsize=(10, 8))
         
-        cmap = ax.imshow(cost_matrix, cmap='YlOrRd', origin='upper', vmax=THREAT_THRESHOLD)
+        cmap = ax.imshow(cost_matrix, cmap='YlOrRd', origin='upper', vmax=threat_threshold)
         cbar = fig.colorbar(cmap, ax=ax)
         cbar.set_label('Threat Risk Level', rotation=270, labelpad=15)
         
         ax.plot(path_coords[:, 1], path_coords[:, 0], color='cyan', linewidth=3, label="Optimal Route")
-        ax.scatter(START_POS[1], START_POS[0], color='lime', marker='^', s=150, edgecolors='black', label="Start")
-        ax.scatter(GOAL_POS[1], GOAL_POS[0], color='magenta', marker='X', s=150, edgecolors='black', label="Goal")
+        ax.scatter(start_pos[1], start_pos[0], color='lime', marker='^', s=150, edgecolors='black', label="Start")
+        ax.scatter(goal_pos[1], goal_pos[0], color='magenta', marker='X', s=150, edgecolors='black', label="Goal")
         
         ax.set_title("UAV Threat-Aware Path Planning Optimization", fontsize=12, fontweight='bold')
         ax.legend(loc='lower right')
         ax.grid(True, alpha=0.2)
         plt.tight_layout()
         plt.show()
+        
+    return metrics
 
+# ==============================================================================
+# LOCAL TESTING SUITE (Ignored when imported by your teammate)
+# ==============================================================================
 if __name__ == "__main__":
-    run_simulation()
+    print("Running local code verification test...")
+    
+    # Mocking what your teammate will send you
+    mock_cost_matrix = np.ones((100, 100)) 
+    mock_cost_matrix[40:60, 40:60] = 45.0  # Put a massive threat block in the center
+    mock_fuel_input = 600.0                # Input fuel capacity
+    
+    # Executing the pipeline with mock data
+    execute_pipeline(cost_matrix=mock_cost_matrix, fuel_capacity=mock_fuel_input)
