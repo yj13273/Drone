@@ -2,11 +2,19 @@ from __future__ import annotations
 
 import numpy as np
 
+from placement.greedy_sensor_placement import GreedySensorPlacement
 from placement.sensor_types import SENSOR_TYPES
 from placement.placed_sensor import PlacedSensor
 from placement.nfz import NFZLoader
 
-from terrain.terrain_constants import WATER
+from terrain.terrain_constants import (
+    FOREST,
+    HILL,
+    MOUNTAIN,
+    PLAIN,
+    VALLEY,
+    WATER,
+)
 
 
 class PlacementEngine:
@@ -87,139 +95,80 @@ class PlacementEngine:
 
         placed = []
 
+        if count <= 0:
+            return placed
+
         sensor_id = starting_id
-
-        # Divide map into zones for distributed placement.
-        # 4 x 4 = 16 zones for a 100 x 100 map.
-        zone_count_x = 4
-        zone_count_y = 4
-
-        zone_size_x = self.height_map.shape[0] // zone_count_x
-        zone_size_y = self.height_map.shape[1] // zone_count_y
-
-        zones = []
-
-        for zx in range(
-            zone_count_x
-        ):
-            for zy in range(
-                zone_count_y
-            ):
-
-                x_start = zx * zone_size_x
-
-                x_end = (
-                    self.height_map.shape[0]
-                    if zx == zone_count_x - 1
-                    else (zx + 1) * zone_size_x
-                )
-
-                y_start = zy * zone_size_y
-
-                y_end = (
-                    self.height_map.shape[1]
-                    if zy == zone_count_y - 1
-                    else (zy + 1) * zone_size_y
-                )
-
-                zone_score = float(
-                    np.mean(
-                        suitability[
-                            x_start:x_end,
-                            y_start:y_end
-                        ]
-                    )
-                )
-
-                zones.append(
-                    (
-                        zone_score,
-                        x_start,
-                        x_end,
-                        y_start,
-                        y_end
-                    )
-                )
-
-        zones.sort(
-            key=lambda z: z[0],
-            reverse=True
+        grid_size = self.height_map.shape[0]
+        min_distance = self._get_separation(
+            sensor_type
         )
 
-        # Try to place one sensor per zone per round.
-        # This avoids placing all sensors in the single best region.
-        while len(placed) < count:
+        # Placement maps are exported/consumed as top-left row matrices.
+        # The terrain generator keeps arrays as [x, y], so build matching
+        # top-left views before using bottom-left world coordinates.
+        suitability_top_left = suitability.T[::-1]
+        terrain_top_left = self.terrain_map.T[::-1]
 
-            placed_this_round = False
+        allowed_terrain_ids = self._allowed_terrain_ids(
+            sensor_type
+        )
 
-            for _, x_start, x_end, y_start, y_end in zones:
+        def is_valid_candidate(x, y):
+            return self._valid_location(
+                x,
+                y,
+                sensor_type,
+                existing_sensors + placed
+            )
 
-                if len(placed) >= count:
-                    break
+        existing_coords = [
+            (
+                sensor.x,
+                sensor.y
+            )
+            for sensor in existing_sensors
+        ]
 
-                zone_suitability = suitability[
-                    x_start:x_end,
-                    y_start:y_end
-                ]
+        placer = GreedySensorPlacement(
+            grid_size=grid_size,
+            min_distance=min_distance,
+            seed=getattr(self.tg, "seed", 42)
+        )
 
-                flat_indices = np.argsort(
-                    zone_suitability.ravel()
-                )[::-1]
+        selected_coords = placer.place_sensors(
+            suitability_map=suitability_top_left,
+            terrain_type_map=terrain_top_left,
+            total_sensors=count,
+            allowed_terrain_ids=allowed_terrain_ids,
+            existing_coords=existing_coords,
+            is_valid_location=is_valid_candidate,
+            debug_label=sensor_type
+        )
 
-                candidates = np.column_stack(
-                    np.unravel_index(
-                        flat_indices,
-                        zone_suitability.shape
-                    )
+        for x, y in selected_coords:
+            sensor = PlacedSensor(
+                sensor_id=sensor_id,
+                sensor_type=sensor_type,
+                label=f"{label}_{len(placed) + 1}",
+                x=x,
+                y=y,
+                z=int(
+                    self.height_map[x, y]
+                ),
+                terrain_class=int(
+                    self.terrain_map[x, y]
+                ),
+                suitability_score=float(
+                    suitability[x, y]
                 )
+            )
 
-                for local_x, local_y in candidates:
+            placed.append(
+                sensor
+            )
 
-                    x = int(
-                        x_start + local_x
-                    )
-
-                    y = int(
-                        y_start + local_y
-                    )
-
-                    if not self._valid_location(
-                        x,
-                        y,
-                        sensor_type,
-                        existing_sensors + placed
-                    ):
-                        continue
-
-                    sensor = PlacedSensor(
-                        sensor_id=sensor_id,
-                        sensor_type=sensor_type,
-                        label=f"{label}_{len(placed) + 1}",
-                        x=x,
-                        y=y,
-                        z=int(
-                            self.height_map[x, y]
-                        ),
-                        terrain_class=int(
-                            self.terrain_map[x, y]
-                        ),
-                        suitability_score=float(
-                            suitability[x, y]
-                        )
-                    )
-
-                    placed.append(
-                        sensor
-                    )
-
-                    sensor_id += 1
-
-                    placed_this_round = True
-
-                    break
-
-            if not placed_this_round:
-                break
+            sensor_id += 1
 
         return placed
 
@@ -244,9 +193,10 @@ class PlacementEngine:
         ):
             return False
 
-        # Water forbidden
+        # Water forbidden unless explicitly enabled in placement config.
         if self.terrain_map[x, y] == WATER:
-            return False
+            if not getattr(self.cfg, "allow_water", False):
+                return False
 
         # Sea-level forbidden as extra safety
         if self.height_map[x, y] <= 0:
@@ -286,6 +236,26 @@ class PlacementEngine:
                 return False
 
         return True
+
+    def _allowed_terrain_ids(
+        self,
+        sensor_type
+    ):
+
+        allowed = {
+            PLAIN,
+            FOREST,
+            HILL,
+            VALLEY,
+            MOUNTAIN,
+        }
+
+        if getattr(self.cfg, "allow_water", False):
+            allowed.add(
+                WATER
+            )
+
+        return allowed
 
     # --------------------------------------------------
     # Separation lookup
