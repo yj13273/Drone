@@ -1,0 +1,47 @@
+services:
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: 3.11-slim
+        CMAKE_BUILD_TYPE: Release
+        CPP_EXECUTABLE_NAME: uav_pipeline
+    image: uav-route-optimization:latest
+    working_dir: /app
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./plots:/app/plots
+    command: sh scripts/run_all.sh
+
+  python-gen:
+    image: uav-route-optimization:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: 3.11-slim
+        CMAKE_BUILD_TYPE: Release
+        CPP_EXECUTABLE_NAME: uav_pipeline
+    working_dir: /app
+    volumes:
+      - ./data:/app/data
+      - ./plots:/app/plots
+    command: sh -c "python env_generator/main.py"
+
+  cpp-only:
+    image: uav-route-optimization:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PYTHON_VERSION: 3.11-slim
+        CMAKE_BUILD_TYPE: Release
+        CPP_EXECUTABLE_NAME: uav_pipeline
+    working_dir: /app
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./plots:/app/plots
+    command: sh -c "./cpp_engine/build/uav_pipeline && python env_generator/visualization/finalcsv.py"

@@ -29,7 +29,7 @@ enum class SimulationMode { Mode25D, Mode3D };
 
 constexpr SimulationMode CURRENT_MODE = SimulationMode::Mode25D;
 
-constexpr int SIMULATION_Z = 70;
+constexpr int SIMULATION_Z = 40;
 
 // =====================================================
 // COSTS
