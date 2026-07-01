@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
@@ -11,7 +13,7 @@ class SuitabilityPlot:
         fig, axes = plt.subplots(
             2,
             2,
-            figsize=(12,10)
+            figsize=(12, 10)
         )
 
         sensor_order = [
@@ -27,20 +29,35 @@ class SuitabilityPlot:
         ):
 
             image = ax.imshow(
-                suitability_maps[sensor],
+                suitability_maps[sensor].T,
                 cmap="plasma",
                 origin="lower",
                 vmin=0,
-                vmax=1
+                vmax=1,
+                extent=[
+                    0,
+                    suitability_maps[sensor].shape[0],
+                    0,
+                    suitability_maps[sensor].shape[1]
+                ]
             )
 
             ax.set_title(
                 f"{sensor.capitalize()} Suitability"
             )
+            ax.set_xlabel(
+                "X (km)"
+            )
+            ax.set_ylabel(
+                "Y (km)"
+            )
 
-            plt.colorbar(
+            cbar = fig.colorbar(
                 image,
                 ax=ax
+            )
+            cbar.set_label(
+                "Suitability Score"
             )
 
         fig.tight_layout()

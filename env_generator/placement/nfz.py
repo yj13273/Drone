@@ -1,8 +1,6 @@
 import csv
 import numpy as np
 
-from matplotlib.path import Path
-
 
 class NFZLoader:
 
@@ -54,8 +52,6 @@ class NFZLoader:
         mask
     ):
 
-        poly = Path(polygon)
-
         min_x = max(
             0,
             int(min(p[0] for p in polygon))
@@ -85,10 +81,66 @@ class NFZLoader:
                 max_y + 1
             ):
 
-                if poly.contains_point(
-                    (x, y)
+                if NFZLoader._point_in_polygon(
+                    x,
+                    y,
+                    polygon
                 ):
                     mask[x, y] = 1
+
+    @staticmethod
+    def _point_on_segment(
+        px,
+        py,
+        ax,
+        ay,
+        bx,
+        by
+    ):
+
+        cross = (px - ax) * (by - ay) - (py - ay) * (bx - ax)
+
+        if abs(cross) > 1e-9:
+            return False
+
+        return (
+            min(ax, bx) <= px <= max(ax, bx) and
+            min(ay, by) <= py <= max(ay, by)
+        )
+
+    @staticmethod
+    def _point_in_polygon(
+        px,
+        py,
+        polygon
+    ):
+
+        inside = False
+        count = len(polygon)
+
+        for i in range(count):
+            ax, ay = polygon[i]
+            bx, by = polygon[(i + 1) % count]
+
+            if NFZLoader._point_on_segment(
+                px,
+                py,
+                ax,
+                ay,
+                bx,
+                by
+            ):
+                return True
+
+            intersects = (
+                (ay > py) != (by > py) and
+                px < (bx - ax) * (py - ay) / (by - ay) + ax
+            )
+
+            if intersects:
+                inside = not inside
+
+        return inside
 
     @staticmethod
     def is_inside_nfz(

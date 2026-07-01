@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
@@ -14,33 +16,33 @@ class LayerPlot:
         fig, axes = plt.subplots(
             2,
             2,
-            figsize=(12,10)
+            figsize=(12, 10)
         )
 
         layers = [
-
             (
                 elevation_layer,
                 "Elevation Layer",
-                "viridis"
+                "viridis",
+                "Normalized Elevation"
             ),
-
             (
                 visibility_layer,
                 "Visibility Layer",
-                "RdYlGn"
+                "RdYlGn",
+                "Visibility Score"
             ),
-
             (
                 strategic_layer,
                 "Strategic Layer",
-                "YlOrRd"
+                "YlOrRd",
+                "Strategic Score"
             ),
-
             (
                 nfz_mask,
                 "NFZ Mask",
-                "Reds"
+                "Reds",
+                "NFZ"
             )
         ]
 
@@ -49,19 +51,31 @@ class LayerPlot:
             layers
         ):
 
-            data, title, cmap = layer
+            data, title, cmap, label = layer
 
             image = ax.imshow(
-                data,
+                data.T,
                 cmap=cmap,
-                origin="lower"
+                origin="lower",
+                extent=[0, data.shape[0], 0, data.shape[1]]
             )
 
-            ax.set_title(title)
+            ax.set_title(
+                title
+            )
+            ax.set_xlabel(
+                "X (km)"
+            )
+            ax.set_ylabel(
+                "Y (km)"
+            )
 
-            plt.colorbar(
+            cbar = fig.colorbar(
                 image,
                 ax=ax
+            )
+            cbar.set_label(
+                label
             )
 
         fig.tight_layout()

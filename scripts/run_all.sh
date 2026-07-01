@@ -7,11 +7,10 @@ echo "====================================="
 
 ROOT_DIR="/app"
 PYTHON_DIR="$ROOT_DIR/env_generator"
-CPP_DIR="$ROOT_DIR/cpp_engine"
 DATA_DIR="$ROOT_DIR/data"
 PLOTS_DIR="$ROOT_DIR/plots"
 OUTPUTS_DIR="$ROOT_DIR/outputs"
-CPP_EXE="$CPP_DIR/build/${CPP_EXECUTABLE_NAME:-uav_pipeline}"
+CPP_EXE="${CPP_EXECUTABLE_NAME:-uav_pipeline}"
 
 export MPLBACKEND=Agg
 
@@ -64,13 +63,11 @@ done
 echo ""
 echo "[4] Checking C++ executable"
 
-if [ ! -f "$CPP_EXE" ]; then
-    echo "[ERROR] C++ executable not found:"
+if ! command -v "$CPP_EXE" >/dev/null 2>&1; then
+    echo "[ERROR] C++ executable not found in PATH:"
     echo "$CPP_EXE"
     exit 1
 fi
-
-chmod +x "$CPP_EXE"
 
 echo "[OK] Found C++ executable: $CPP_EXE"
 

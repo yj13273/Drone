@@ -27,10 +27,47 @@ import random
 
 import noise
 import numpy as np
-from scipy.ndimage import gaussian_filter
 
 from config.terrain_config import TerrainConfig
 from terrain.terrain_constants import *
+
+
+def gaussian_filter_numpy(array: np.ndarray, sigma: float) -> np.ndarray:
+    """
+    Lightweight NumPy Gaussian smoothing helper.
+
+    Applies separable 2D Gaussian blur:
+    1. Horizontal blur
+    2. Vertical blur
+
+    This is sufficient for smoothing 100x100 terrain maps and avoids heavier dependencies.
+    """
+    if sigma <= 0:
+        return array.copy()
+
+    radius = int(3 * sigma)
+    if radius < 1:
+        return array.copy()
+
+    x = np.arange(-radius, radius + 1, dtype=float)
+    kernel = np.exp(-(x ** 2) / (2 * sigma ** 2))
+    kernel = kernel / kernel.sum()
+
+    padded = np.pad(array, ((0, 0), (radius, radius)), mode="edge")
+    horizontal = np.apply_along_axis(
+        lambda row: np.convolve(row, kernel, mode="valid"),
+        axis=1,
+        arr=padded,
+    )
+
+    padded = np.pad(horizontal, ((radius, radius), (0, 0)), mode="edge")
+    vertical = np.apply_along_axis(
+        lambda col: np.convolve(col, kernel, mode="valid"),
+        axis=0,
+        arr=padded,
+    )
+
+    return vertical
 
 
 class TerrainGenerator:
@@ -188,7 +225,7 @@ class TerrainGenerator:
         )
 
         # Smooth broad terrain
-        combined = gaussian_filter(
+        combined = gaussian_filter_numpy(
             combined,
             sigma=1.2
         )
@@ -224,7 +261,7 @@ class TerrainGenerator:
                     # mountains, capped for UAV placement suitability
                     height[x, y] = 18 + e * 30
 
-        height = gaussian_filter(
+        height = gaussian_filter_numpy(
             height,
             sigma=1.0
         )

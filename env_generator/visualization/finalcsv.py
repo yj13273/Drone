@@ -1,9 +1,9 @@
+from pathlib import Path
+
 import matplotlib
 matplotlib.use("Agg")
-
-from pathlib import Path
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 class FinalCostPlotter:
@@ -35,39 +35,40 @@ class FinalCostPlotter:
                 f"Expected 100x100 grid, but got shape: {matrix.shape}"
             )
 
-        # CSV is written from top-left.
-        # Your coordinate origin is bottom-left.
-        # Flip vertically so plot coordinates match your grid.
-        matrix = np.flipud(matrix)
-
-        return matrix
+        # CSV is written from top-left. Flip vertically so plot coordinates
+        # match the bottom-left grid origin.
+        return np.flipud(matrix)
 
     def plot_binary(self, matrix, threshold=0.0):
         binary = (matrix > threshold).astype(int)
 
-        plt.figure(figsize=(8, 8))
-        plt.imshow(
+        fig, ax = plt.subplots(figsize=(8, 8))
+        image = ax.imshow(
             binary,
             cmap="gray_r",
             origin="lower",
-            extent=[0, 100, 0, 100]
+            extent=[0, 100, 0, 100],
+            vmin=0,
+            vmax=1
         )
 
-        plt.title("Binary Final Cost Map (0 vs Non-Zero)")
-        plt.xlabel("X")
-        plt.ylabel("Y")
-        plt.colorbar(label="0 = Free, 1 = Non-Zero Cost")
-        plt.tight_layout()
+        ax.set_title("Binary Final Cost Map (0 vs Non-Zero)")
+        ax.set_xlabel("X (km)")
+        ax.set_ylabel("Y (km)")
+        cbar = fig.colorbar(image, ax=ax, ticks=[0, 1])
+        cbar.ax.set_yticklabels(["Zero", "Non-zero"])
+        cbar.set_label("Cost Category")
+        fig.tight_layout()
 
         output_path = self.output_dir / "final_cost_binary.png"
-        plt.savefig(output_path, dpi=200)
-        plt.close()
+        fig.savefig(output_path, dpi=200)
+        plt.close(fig)
 
         print(f"[PLOT] Saved binary plot to: {output_path}")
 
     def plot_heatmap(self, matrix):
-        plt.figure(figsize=(8, 8))
-        plt.imshow(
+        fig, ax = plt.subplots(figsize=(8, 8))
+        image = ax.imshow(
             matrix,
             cmap="hot",
             origin="lower",
@@ -76,15 +77,16 @@ class FinalCostPlotter:
             extent=[0, 100, 0, 100]
         )
 
-        plt.title("Final Cost Heatmap")
-        plt.xlabel("X")
-        plt.ylabel("Y")
-        plt.colorbar(label="Cost / Probability")
-        plt.tight_layout()
+        ax.set_title("Final Cost Heatmap")
+        ax.set_xlabel("X (km)")
+        ax.set_ylabel("Y (km)")
+        cbar = fig.colorbar(image, ax=ax)
+        cbar.set_label("Cost / Probability")
+        fig.tight_layout()
 
         output_path = self.output_dir / "final_cost_heatmap.png"
-        plt.savefig(output_path, dpi=200)
-        plt.close()
+        fig.savefig(output_path, dpi=200)
+        plt.close(fig)
 
         print(f"[PLOT] Saved heatmap to: {output_path}")
 

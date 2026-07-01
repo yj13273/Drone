@@ -1,5 +1,21 @@
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+
+from terrain.terrain_constants import (
+    FOREST,
+    HILL,
+    MOUNTAIN,
+    PLAIN,
+    VALLEY,
+    WATER,
+)
+from visualization.styles import (
+    SENSOR_COLORS,
+    SENSOR_MARKERS,
+    TERRAIN_COLORS,
+)
 
 
 class SensorPlot:
@@ -10,45 +26,54 @@ class SensorPlot:
         sensors
     ):
 
-        colors = [
-            "#2B6CB0",  # Water
-            "#D9C27C",  # Plain
-            "#2F855A",  # Forest
-            "#B7791F",  # Hill
-            "#718096",  # Valley
-            "#4A5568",  # Mountain
+        terrain_ids = [
+            WATER,
+            PLAIN,
+            FOREST,
+            HILL,
+            VALLEY,
+            MOUNTAIN
         ]
-
+        colors = [
+            TERRAIN_COLORS[terrain_id]
+            for terrain_id in terrain_ids
+        ]
         cmap = ListedColormap(
             colors
         )
-
-        sensor_styles = {
-            "radar": ("^", "red"),
-            "infrared": ("s", "orange"),
-            "visual": ("D", "lime"),
-            "acoustic": ("o", "blue"),
-        }
 
         fig, ax = plt.subplots(
             figsize=(9, 8)
         )
 
-        ax.imshow(
-            terrain_map,
+        image = ax.imshow(
+            terrain_map.T,
             cmap=cmap,
             origin="lower",
             vmin=0,
-            vmax=5
+            vmax=5,
+            extent=[0, terrain_map.shape[0], 0, terrain_map.shape[1]]
+        )
+
+        cbar = fig.colorbar(
+            image,
+            ax=ax,
+            ticks=terrain_ids
+        )
+        cbar.set_label(
+            "Terrain Type"
         )
 
         used_labels = set()
 
         for sensor in sensors:
-
-            marker, color = sensor_styles.get(
+            marker = SENSOR_MARKERS.get(
                 sensor.sensor_type,
-                ("x", "black")
+                "x"
+            )
+            color = SENSOR_COLORS.get(
+                sensor.sensor_type,
+                "black"
             )
 
             label = sensor.sensor_type
@@ -61,30 +86,28 @@ class SensorPlot:
                 )
 
             ax.scatter(
-                sensor.y,
                 sensor.x,
+                sensor.y,
                 marker=marker,
                 color=color,
-                s=70,
+                s=80,
                 edgecolors="black",
-                linewidths=0.5,
+                linewidths=0.6,
                 label=label
             )
 
         ax.set_title(
             "Sensor Placement Map"
         )
-
         ax.set_xlabel(
             "X (km)"
         )
-
         ax.set_ylabel(
             "Y (km)"
         )
-
         ax.legend(
             loc="upper right"
         )
+        fig.tight_layout()
 
         return fig

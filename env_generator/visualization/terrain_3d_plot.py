@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -10,7 +12,7 @@ class Terrain3DPlot:
     ):
 
         fig = plt.figure(
-            figsize=(12,8)
+            figsize=(12, 8)
         )
 
         ax = fig.add_subplot(
@@ -18,14 +20,14 @@ class Terrain3DPlot:
             projection="3d"
         )
 
-        size = height_map.shape[0]
-
-        x = np.arange(size)
-        y = np.arange(size)
+        size_x, size_y = height_map.shape
+        x = np.arange(size_x)
+        y = np.arange(size_y)
 
         xx, yy = np.meshgrid(
             x,
-            y
+            y,
+            indexing="ij"
         )
 
         surface = ax.plot_surface(
@@ -33,20 +35,28 @@ class Terrain3DPlot:
             yy,
             height_map,
             cmap="terrain",
-            edgecolor="none"
+            edgecolor="none",
+            linewidth=0,
+            antialiased=True
         )
 
-        fig.colorbar(
+        cbar = fig.colorbar(
             surface,
-            shrink=0.6
+            ax=ax,
+            shrink=0.6,
+            pad=0.1
+        )
+        cbar.set_label(
+            "Height (z units)"
         )
 
         ax.set_title(
             "3D Terrain Surface"
         )
-
         ax.set_xlabel("X (km)")
         ax.set_ylabel("Y (km)")
         ax.set_zlabel("Z")
+
+        fig.tight_layout()
 
         return fig

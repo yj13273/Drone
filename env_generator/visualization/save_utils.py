@@ -1,4 +1,7 @@
 import os
+
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
@@ -9,7 +12,7 @@ class SaveUtils:
         fig,
         output_dir,
         filename,
-        dpi=150
+        dpi=180
     ):
 
         os.makedirs(

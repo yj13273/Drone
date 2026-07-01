@@ -44,4 +44,4 @@ services:
       - ./data:/app/data
       - ./outputs:/app/outputs
       - ./plots:/app/plots
-    command: sh -c "./cpp_engine/build/uav_pipeline && python env_generator/visualization/finalcsv.py"
+    command: sh -c "uav_pipeline && python env_generator/visualization/finalcsv.py"

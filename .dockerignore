@@ -8,10 +8,12 @@
 **/*.pyd
 **/.pytest_cache/
 **/.mypy_cache/
+**/.ruff_cache/
 **/.venv/
 **/venv/
-**/venv311/
 **/venv2/
+**/venv311/
+**/venv3/
 
 cpp_engine/build/
 build/
