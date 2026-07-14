@@ -3,12 +3,7 @@
 When you're ready, start your application by running:
 `docker compose up --build`.
 
-This repository does not expose a web server, so there is no `localhost:8000` endpoint.
-The compose workflow builds the container and runs the UAV generation pipeline, then
-writes results to `data/`, `outputs/`, and `plots/`.
-
-If you want a browser-accessible app, add a service that listens on a port and update
-`compose.yaml` to publish it.
+Your application will be available at http://localhost:8000.
 
 ### Deploying your application to the cloud
 
